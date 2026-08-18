@@ -1,6 +1,6 @@
 "use strict";
 const DATA = JSON.parse(document.getElementById('payload').textContent);
-const LEADS = DATA.leads, META = DATA.meta, B = DATA.build;
+const LEADS = DATA.leads, META = DATA.meta, SALES = DATA.sales || [], B = DATA.build;
 const TAX = B.tax_factor || 1.0;
 
 /* ---------------- format ---------------- */
@@ -31,7 +31,12 @@ const STATE = {
   mSelC:new Set(), mSelA:new Set(), mSelAd:new Set(),
   filterFunil:'', filterTemp:'',
   sort:{}, colw: JSON.parse(localStorage.getItem('dm_colw')||'{}'),
+  // granularidade por gráfico temporal (default diário; "Vendas & receita" mensal)
+  gran:{ gVendas:'month', mVendas:'month', rVendas:'month' },
 };
+/* gráficos temporais que ganham o seletor de granularidade (id -> default) */
+const TEMPORAL_CHARTS={ gVendas:'month', gAgd:'day', gCombo:'day',
+  mVendas:'month', mAgd:'day', mCombo:'day', rVendas:'month', rAgd:'day', rCombo:'day' };
 const taxf = ()=> STATE.tax ? TAX : 1;
 
 /* active date test: selDays override the De/Até range */
@@ -49,6 +54,9 @@ function funilTempMatch(r){
 }
 const leadsActive = ()=> LEADS.filter(l=>dateActive(l.d) && funilTempMatch(l));
 const metaActive  = ()=> META.filter(m=>dateActive(m.d) && funilTempMatch(m));
+/* Vendas ativas: filtradas pela DATA DA VENDA e pelo filtro global de funil/temp.
+   Visão Geral usa TODAS; a página Meta Ads usa só as de tráfego pago (attributed). */
+const salesActive = ()=> SALES.filter(s=>dateActive(s.d) && funilTempMatch(s));
 
 /* ---------------- aggregation ---------------- */
 function derive(a){
@@ -98,26 +106,63 @@ function salesOf(a){
     tmcx:         hasVd&&vendas?caixa/vendas:null,
   };
 }
-function buildAgg(fL,fM,dim){
+/* Agregação — leads (contagem/MQL/agendamento), meta (gasto/impr/etc.) e sales
+   (vendas/faturamento/caixa, já com data da venda e atribuição). fS é opcional. */
+function buildAgg(fL,fM,fS,dim){
   const m={};
   const get=k=>m[k]||(m[k]={sp:0,im:0,cl:0,pv:0,leads:0,mqls:0,agendamentos:0,vendas:0,fat:0,caixa:0});
   fM.forEach(r=>{const a=get(r[dim]); a.sp+=r.sp; a.im+=r.im; a.cl+=r.cl; a.pv+=r.pv;});
-  fL.forEach(r=>{const a=get(r[dim]); a.leads+=1; a.mqls+=r.q; a.agendamentos+=r.agd||0; a.vendas+=r.vendas||0; a.fat+=r.fat||0; a.caixa+=r.caixa||0;});
+  fL.forEach(r=>{const a=get(r[dim]); a.leads+=1; a.mqls+=r.q; a.agendamentos+=r.agd||0;});
+  (fS||[]).forEach(r=>{ if(r[dim]==null) return; const a=get(r[dim]); a.vendas+=r.vendas||0; a.fat+=r.fat||0; a.caixa+=r.caixa||0;});
   return m;
 }
-function totals(fL,fM){
+function totals(fL,fM,fS){
   let sp=0,im=0,cl=0,pv=0; fM.forEach(r=>{sp+=r.sp;im+=r.im;cl+=r.cl;pv+=r.pv;});
-  let mqls=0,agendamentos=0,vendas=0,fat=0,caixa=0;
-  fL.forEach(r=>{mqls+=r.q; agendamentos+=r.agd||0; vendas+=r.vendas||0; fat+=r.fat||0; caixa+=r.caixa||0;});
+  let mqls=0,agendamentos=0; fL.forEach(r=>{mqls+=r.q; agendamentos+=r.agd||0;});
+  let vendas=0,fat=0,caixa=0; (fS||[]).forEach(r=>{vendas+=r.vendas||0; fat+=r.fat||0; caixa+=r.caixa||0;});
   return {sp, im, cl, pv, leads:fL.length, mqls, agendamentos, vendas, fat, caixa};
 }
-/* daily aggregation for a source pair */
-function daily(fL,fM){
+/* daily aggregation for leads/meta/sales — cada fonte cria o bucket do seu dia
+   (a venda tem data própria: um dia com venda mas sem lead/gasto ainda aparece). */
+function daily(fL,fM,fS){
   const days={}; const g=d=>days[d]||(days[d]={d, sp:0,im:0,cl:0,pv:0,leads:0,mqls:0,agendamentos:0,vendas:0,fat:0,caixa:0});
   fM.forEach(r=>{if(!r.d)return; const a=g(r.d); a.sp+=r.sp; a.im+=r.im; a.cl+=r.cl; a.pv+=r.pv;});
-  fL.forEach(r=>{if(!r.d)return; const a=g(r.d); a.leads+=1; a.mqls+=r.q; a.agendamentos+=r.agd||0; a.vendas+=r.vendas||0; a.fat+=r.fat||0; a.caixa+=r.caixa||0;});
+  fL.forEach(r=>{if(!r.d)return; const a=g(r.d); a.leads+=1; a.mqls+=r.q; a.agendamentos+=r.agd||0;});
+  (fS||[]).forEach(r=>{if(!r.d)return; const a=g(r.d); a.vendas+=r.vendas||0; a.fat+=r.fat||0; a.caixa+=r.caixa||0;});
   return Object.values(days).sort((a,b)=>a.d<b.d?-1:1);
 }
+/* ---- granularidade temporal (estilo Looker Studio) ----
+   Agrupa o array diário em dia/semana/mês/trimestre/semestre/ano, somando os
+   campos crus. Semana/trimestre/semestre ficam SEMPRE presos ao mesmo ano (a
+   chave carrega o ano — nunca junta virada de ano). */
+const GRAN_OPTS=[['day','Diário'],['week','Semanal'],['month','Mensal'],['quarter','Trimestral'],['semester','Semestral'],['year','Anual']];
+const MON_ABBR=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function isoWeek(dt){ const t=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate()));
+  const day=t.getUTCDay()||7; t.setUTCDate(t.getUTCDate()+4-day);
+  const ys=new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  return Math.ceil((((t-ys)/86400000)+1)/7); }
+function granBucket(ds,gran){   // -> {key, sortKey, label} para o dia ISO ds
+  const dt=new Date(ds+'T00:00:00'), y=dt.getFullYear();
+  const yy=String(y).slice(2), mm=dt.getMonth();
+  if(gran==='week'){ const w=isoWeek(dt); return {key:y+'-W'+pad(w), sortKey:ds, label:'Sem '+ds.slice(8)+'/'+ds.slice(5,7)}; }
+  if(gran==='month'){ return {key:y+'-'+pad(mm+1), sortKey:y+'-'+pad(mm+1), label:MON_ABBR[mm]+'/'+yy}; }
+  if(gran==='quarter'){ const q=Math.floor(mm/3)+1; return {key:y+'-Q'+q, sortKey:y+'-'+pad((q-1)*3+1), label:'T'+q+'/'+yy}; }
+  if(gran==='semester'){ const s=mm<6?1:2; return {key:y+'-S'+s, sortKey:y+'-'+pad((s-1)*6+1), label:'S'+s+'/'+yy}; }
+  if(gran==='year'){ return {key:''+y, sortKey:''+y, label:''+y}; }
+  return {key:ds, sortKey:ds, label:ds.slice(5)};   // day
+}
+function rollup(dayArr, gran){
+  if(!gran||gran==='day') return dayArr;
+  const m={};
+  dayArr.forEach(x=>{ if(!x.d) return; const b=granBucket(x.d,gran);
+    const a=m[b.key]||(m[b.key]={d:x.d, sortKey:b.sortKey, label:b.label, sp:0,im:0,cl:0,pv:0,leads:0,mqls:0,agendamentos:0,vendas:0,fat:0,caixa:0});
+    a.sp+=x.sp; a.im+=x.im; a.cl+=x.cl; a.pv+=x.pv; a.leads+=x.leads; a.mqls+=x.mqls;
+    a.agendamentos+=x.agendamentos||0; a.vendas+=x.vendas||0; a.fat+=x.fat||0; a.caixa+=x.caixa||0;
+    if(x.d<a.d) a.d=x.d;
+  });
+  return Object.values(m).sort((a,b)=>a.sortKey<b.sortKey?-1:1);
+}
+const granOf=id=> STATE.gran[id]||'day';
 
 
 /* ---------------- generic interactive table ---------------- */
@@ -291,9 +336,8 @@ function buildFunnelSteps(t, dv, s, opts){
   const NA='<span class="na-tag">sem dado</span>';
   const imprSecs=[['CPM',brl(dv.cpm),'cost']];
   if(opts.meta) imprSecs.push(['Frequência',NA,'conv']);
-  const vendaSecs=[['ConvAGD',pct(s.convagd),'conv']];
-  if(opts.meta) vendaSecs.push(['ConvMQL',pct(s.convmql),'conv']);
-  vendaSecs.push(['CAC',brl(s.cac),'cost']);
+  // Card de Vendas: só ConvAGD (ConvMQL removido a pedido) + CAC.
+  const vendaSecs=[['ConvAGD',pct(s.convagd),'conv'],['CAC',brl(s.cac),'cost']];
   return [
     ['Gasto Total', brl(dv.gasto), [], false, 'hl-gasto'],
     ['Impressões', intf(t.im), imprSecs],
@@ -318,7 +362,7 @@ const cmuted=()=>cvar('--muted')||'#6B7280', cink=()=>cvar('--ink')||'#1A1D2E', 
 function destroy(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
 function comboChart(id, d){
   destroy(id); const el=document.getElementById(id); if(!el) return;
-  const labels=d.map(x=>x.d.slice(5)), mut=cmuted(), gr=cgrid();
+  const labels=d.map(x=>x.label||x.d.slice(5)), mut=cmuted(), gr=cgrid();
   const cLeads=cvar('--chart-leads'), cMqls=cvar('--chart-mqls'), cGasto=cvar('--chart-gasto'), cCpl=cvar('--chart-cpl')||cink(), cCpmql=cvar('--chart-cpmql');
   charts[id]=new Chart(el,{
     data:{labels, datasets:[
@@ -346,7 +390,7 @@ function comboChart(id, d){
    pra não ficarem achatados sob o Gasto. */
 function mixChart(id, d, series){
   destroy(id); const el=document.getElementById(id); if(!el) return;
-  const labels=d.map(x=>x.d.slice(5)), mut=cmuted(), gr=cgrid();
+  const labels=d.map(x=>x.label||x.d.slice(5)), mut=cmuted(), gr=cgrid();
   const axisDefs={
     count:{position:'left',beginAtZero:true,ticks:{color:mut,precision:0,font:{size:10}},grid:{color:gr}},
     money:{position:'right',beginAtZero:true,ticks:{color:mut,font:{size:10},callback:v=>'R$'+nf0.format(v)},grid:{display:false}},
@@ -367,31 +411,31 @@ function mixChart(id, d, series){
         tooltip:{callbacks:{label:c=>c.dataset.label+': '+series[c.datasetIndex].fmt(c.raw)}}},
       scales}});
 }
-/* 3 gráficos diários dedicados (Vendas · Agendamentos · MQLs) — pedido do cliente.
-   Cada um com a etapa em BARRAS e as métricas de apoio em LINHAS. */
-function renderDailyMixes(vId,aId,mId,d){
+/* Gráficos dedicados: Vendas & receita · Agendamentos (MQLs removido a pedido).
+   Cada um respeita sua própria granularidade (rollup por id). A etapa vem em
+   BARRAS e as métricas de apoio em LINHAS. */
+function renderDailyMixes(vId,aId,d){
   const g=x=>+(x.sp*taxf()).toFixed(2);
   const cv=n=>cvar(n);
-  mixChart(vId,d,[
-    {label:'Vendas',type:'bar',axis:'count',color:cv('--chart-leads'),fn:x=>x.vendas||null,fmt:intf},
+  // ORDEM das séries = ordem do TOOLTIP e da legenda (pedido do cliente):
+  // Gasto · Vendas · CAC · Receita · TM‑R · ROAS‑R · Faturamento · TM‑F · ROAS‑F.
+  mixChart(vId, rollup(d,granOf(vId)), [
     {label:'Gasto',type:'line',axis:'money',color:cv('--chart-gasto'),fn:g,fmt:brl},
-    {label:'Receita',type:'line',axis:'money',color:cv('--good'),fn:x=>x.caixa||null,fmt:brl},
-    {label:'Faturamento',type:'line',axis:'money',color:cv('--aqua'),fn:x=>x.fat||null,fmt:brl},
-    {label:'TM‑R',type:'line',axis:'money',color:cv('--cc6'),fn:x=>x.vendas?+(x.caixa/x.vendas).toFixed(2):null,fmt:brl},
-    {label:'TM‑F',type:'line',axis:'money',color:cv('--cc8'),fn:x=>x.vendas?+(x.fat/x.vendas).toFixed(2):null,fmt:brl},
+    {label:'Vendas',type:'bar',axis:'count',color:cv('--chart-leads'),fn:x=>x.vendas||null,fmt:intf},
     {label:'CAC',type:'line',axis:'moneySmall',color:cv('--chart-cpl'),fn:x=>x.vendas?+(g(x)/x.vendas).toFixed(2):null,fmt:brl},
+    {label:'Receita',type:'line',axis:'money',color:cv('--good'),fn:x=>x.caixa||null,fmt:brl},
+    {label:'TM‑R',type:'line',axis:'money',color:cv('--cc6'),fn:x=>x.vendas?+(x.caixa/x.vendas).toFixed(2):null,fmt:brl},
     {label:'ROAS‑R',type:'line',axis:'ratio',color:cv('--cc5'),fn:x=>{const s=x.sp*taxf();return s?+(x.caixa/s).toFixed(2):null;},fmt:numf},
+    {label:'Faturamento',type:'line',axis:'money',color:cv('--aqua'),fn:x=>x.fat||null,fmt:brl},
+    {label:'TM‑F',type:'line',axis:'money',color:cv('--cc8'),fn:x=>x.vendas?+(x.fat/x.vendas).toFixed(2):null,fmt:brl},
     {label:'ROAS‑F',type:'line',axis:'ratio',color:cv('--cc9'),fn:x=>{const s=x.sp*taxf();return s?+(x.fat/s).toFixed(2):null;},fmt:numf},
   ]);
-  mixChart(aId,d,[
+  mixChart(aId, rollup(d,granOf(aId)), [
     {label:'Agendamentos',type:'bar',axis:'count',color:cv('--cc4'),fn:x=>x.agendamentos||null,fmt:intf},
     {label:'Gasto',type:'line',axis:'money',color:cv('--chart-gasto'),fn:g,fmt:brl},
-    {label:'CPAGD',type:'line',axis:'moneySmall',color:cv('--chart-cpmql'),fn:x=>x.agendamentos?+(g(x)/x.agendamentos).toFixed(2):null,fmt:brl},
-  ]);
-  mixChart(mId,d,[
-    {label:'MQLs',type:'bar',axis:'count',color:cv('--chart-mqls'),fn:x=>x.mqls||null,fmt:intf},
-    {label:'Gasto',type:'line',axis:'money',color:cv('--chart-gasto'),fn:g,fmt:brl},
-    {label:'CPMQL',type:'line',axis:'moneySmall',color:cv('--chart-cpmql'),fn:x=>x.mqls?+(g(x)/x.mqls).toFixed(2):null,fmt:brl},
+    // CPAGD em PRETO (contraste com a barra âmbar) — --chart-cpl é quase-preto no
+    // tema claro e quase-branco no escuro (visível nos dois).
+    {label:'CPAGD',type:'line',axis:'moneySmall',color:cv('--chart-cpl'),fn:x=>x.agendamentos?+(g(x)/x.agendamentos).toFixed(2):null,fmt:brl},
   ]);
 }
 function hbar(id, items, valFn, colorFn, top, unit){
@@ -520,31 +564,32 @@ function renderGeral(){ renderGeralCore(GERAL_IDS); renderFunilSegments(); }
    ativo (mesma base leadsActive()/metaActive() da Visão Geral). */
 function renderFunilSegments(){
   const host=document.getElementById('geralFunis'); if(!host) return;
-  const fL=leadsActive(), fM=metaActive();
+  const fL=leadsActive(), fM=metaActive(), fS=salesActive();
   host.innerHTML = FUNIS.map(fn=>{
-    const sL=fL.filter(l=>l.funil===fn), sM=fM.filter(m=>m.funil===fn);
-    const t=totals(sL,sM), dv=derive(t), s=salesOf(t);
+    const sL=fL.filter(l=>l.funil===fn), sM=fM.filter(m=>m.funil===fn), sS=fS.filter(s=>s.funil===fn);
+    const t=totals(sL,sM,sS), dv=derive(t), s=salesOf(t);
     return `<div class="card funil-seg-card"><h3>${fn}</h3><div class="funnel">${funnelHTML(buildFunnelSteps(t,dv,s))}</div></div>`;
   }).join('');
 }
 function renderGeralCore(ids){
-  const fL=leadsActive(), fM=metaActive();
-  const t=totals(fL,fM), dv=derive(t), s=salesOf(t), g=dv.gasto;
+  const fL=leadsActive(), fM=metaActive(), fS=salesActive();
+  const fSp=fS.filter(x=>x.attributed);   // vendas de tráfego pago (p/ atribuição por anúncio)
+  const t=totals(fL,fM,fS), dv=derive(t), s=salesOf(t), g=dv.gasto;
   const leadsAds=fL.filter(l=>l.src==='meta'||l.src==='google');
   const nAds=leadsAds.length, mqlsAds=leadsAds.reduce((s,r)=>s+r.q,0);
   const nOrg=fL.filter(l=>l.src==='org').length;
   const semUtm=fL.filter(l=>!l.utm).length, comUtm=t.leads-semUtm;
   document.getElementById(ids.funnel).innerHTML=funnelHTML(buildFunnelSteps(t,dv,s));
   // ---- Mar05: métricas secundárias mais úteis (não repetem o funil) ----
-  const dd=daily(fL,fM), nDays=dd.length||1;
-  const adAgg=buildAgg(fL,fM,'ad');
+  const dd=daily(fL,fM,fS), nDays=dd.length||1;
+  const adAgg=buildAgg(fL,fM,fSp,'ad');
   let topAd=null, bestAd=null, nAdsAtivos=0;
   Object.entries(adAgg).forEach(([ad,a])=>{
     if(a.sp>0) nAdsAtivos++;
     if(topAd==null||a.mqls>topAd.m) topAd={ad,m:a.mqls};
     if(a.mqls>0){ const cq=(a.sp*taxf())/a.mqls; if(bestAd==null||cq<bestAd.v) bestAd={ad,v:cq}; }
   });
-  const nCampAtivas=Object.values(buildAgg(fL,fM,'camp')).filter(a=>a.sp>0).length;
+  const nCampAtivas=Object.values(buildAgg(fL,fM,[],'camp')).filter(a=>a.sp>0).length;
   const concTop=(t.mqls&&topAd)?topAd.m/t.mqls:null;
   const adShort=s=>{ s=String(s||'—'); return s.length>22?s.slice(0,21)+'…':s; };
   const k2=[
@@ -562,9 +607,9 @@ function renderGeralCore(ids){
     {label:'Ticket Médio (Faturamento)',val:brl(s.tm),aux:'Faturamento / Vendas'},
   ];
   document.getElementById(ids.kpis2).innerHTML=k2.map(kpiCard).join('');
-  const dCombo=daily(fL,fM);
-  comboChart(ids.combo, dCombo);
-  renderDailyMixes(ids.vendas, ids.agd, ids.mql, dCombo);
+  const dCombo=daily(fL,fM,fS);
+  comboChart(ids.combo, rollup(dCombo,granOf(ids.combo)));
+  renderDailyMixes(ids.vendas, ids.agd, dCombo);
   // Distribuição de leads (4.1): respostas do formulário, aproveitando melhor os
   // campos coletados. Cada gráfico = contagem de leads por resposta (top 10).
   distBars(ids.pais, fL, 'pais', '--chart-leads', 10);
@@ -575,10 +620,10 @@ function renderGeralCore(ids){
   distBars(ids.investir, fL, 'investir', '--cc4', 10);
   distBars(ids.retorno, fL, 'retorno', '--aqua', 10);
   // tabela diaria (todos os leads), ultimo dia no topo + heatmap
-  const dl=daily(fL,fM).slice().reverse();
+  const dl=daily(fL,fM,fS).slice().reverse();
   renderTable({id:ids.daily, cols:DAILY_COLS, center:true, centerAll:true, fit:true,
     rows:dl.map(x=>{const d=derive(x); return {k:x.d, cells:dailyCells(x,d)};}),
-    total:(()=>{const d=derive(t);return dailyCells({d:null,leads:t.leads,mqls:t.mqls},d,true);})(),
+    total:(()=>{const d=derive(t);return dailyCells({...t,d:null},d,true);})(),
     selectable:true, selSet:STATE.selDays,
     onSelect:(k,e)=>{ toggleSet(STATE.selDays,k,e&&(e.ctrlKey||e.metaKey)); syncDateInputs(); renderAll(); },
   });
@@ -828,8 +873,9 @@ function renderRelBrief(){
    anúncios no total, pra não sugerir que 10 linhas = 10 vencedores. */
 function renderRelAds(){
   const fL=leadsActive(), fM=metaActive();
+  const fS=salesActive().filter(s=>s.attributed);   // vendas de tráfego pago, por anúncio
   const struct=adStructMap(fM,fL);
-  const agg=buildAgg(fL,fM,'ad');
+  const agg=buildAgg(fL,fM,fS,'ad');
   const pool=Object.entries(agg).filter(([ad,a])=>a.sp>0).map(([ad,a])=>({ad, a, struct:struct[ad]||{camp:'—',adset:'—'}}));
 
   const all=pool.slice().sort((x,y)=>{ const sx=adSampleOk(x.a), sy=adSampleOk(y.a);
@@ -896,14 +942,17 @@ function dailyCells(x,d,isTotal){
 }
 
 /* ---------------- PAGE 2: Meta Ads ---------------- */
-/* Mar04: considera TODOS os leads e TODO o gasto de todas as fontes de tráfego
-   (sem filtrar por atribuição). Hoje só há Meta; quando vier google/tiktok/orgânico
-   etc., já entram automaticamente. */
-function metaScope(ex){ let fL=leadsActive(), fM=metaActive();
-  if(ex!=='C'&&STATE.mSelC.size){ fL=fL.filter(r=>STATE.mSelC.has(r.camp)); fM=fM.filter(r=>STATE.mSelC.has(r.camp)); }
-  if(ex!=='A'&&STATE.mSelA.size){ fL=fL.filter(r=>STATE.mSelA.has(r.adset)); fM=fM.filter(r=>STATE.mSelA.has(r.adset)); }
-  if(ex!=='D'&&STATE.mSelAd.size){ fL=fL.filter(r=>STATE.mSelAd.has(r.ad)); fM=fM.filter(r=>STATE.mSelAd.has(r.ad)); }
-  return {fL,fM}; }
+/* Página de TRÁFEGO PAGO: só leads de mídia paga (src meta/google — exclui
+   orgânico, senão os agendamentos/MQLs orgânicos entrariam) e só vendas
+   atribuídas ao tráfego (attributed). fS acompanha o mesmo escopo (camp/adset/ad). */
+function metaScope(ex){
+  let fL=leadsActive().filter(l=>l.src==='meta'||l.src==='google');
+  let fM=metaActive();
+  let fS=salesActive().filter(s=>s.attributed);
+  if(ex!=='C'&&STATE.mSelC.size){ fL=fL.filter(r=>STATE.mSelC.has(r.camp)); fM=fM.filter(r=>STATE.mSelC.has(r.camp)); fS=fS.filter(r=>STATE.mSelC.has(r.camp)); }
+  if(ex!=='A'&&STATE.mSelA.size){ fL=fL.filter(r=>STATE.mSelA.has(r.adset)); fM=fM.filter(r=>STATE.mSelA.has(r.adset)); fS=fS.filter(r=>STATE.mSelA.has(r.adset)); }
+  if(ex!=='D'&&STATE.mSelAd.size){ fL=fL.filter(r=>STATE.mSelAd.has(r.ad)); fM=fM.filter(r=>STATE.mSelAd.has(r.ad)); fS=fS.filter(r=>STATE.mSelAd.has(r.ad)); }
+  return {fL,fM,fS}; }
 /* selecao multipla: Ctrl adiciona (OR) sem sumir as demais linhas; clique simples troca a ancora */
 function selDim(dim,key,ctrl){
   const sets={C:STATE.mSelC,A:STATE.mSelA,D:STATE.mSelAd}, s=sets[dim];
@@ -913,18 +962,18 @@ function selDim(dim,key,ctrl){
   renderMeta();
 }
 function renderMeta(){
-  const F=metaScope(null), fL=F.fL, fM=F.fM;   // KPIs, funil, graficos e tabela diaria
-  const t=totals(fL,fM), dv=derive(t), s=salesOf(t), g=dv.gasto;
+  const F=metaScope(null), fL=F.fL, fM=F.fM, fS=F.fS;   // KPIs, funil, graficos e tabela diaria
+  const t=totals(fL,fM,fS), dv=derive(t), s=salesOf(t), g=dv.gasto;
   document.getElementById('metaFunnel').innerHTML=funnelHTML(buildFunnelSteps(t,dv,s,{meta:true}));
 
-  const dComboM=daily(fL,fM);
-  comboChart('mCombo', dComboM);
-  renderDailyMixes('mVendas','mAgd','mMql', dComboM);
+  const dComboM=daily(fL,fM,fS);
+  comboChart('mCombo', rollup(dComboM,granOf('mCombo')));
+  renderDailyMixes('mVendas','mAgd', dComboM);
 
-  const dl=daily(fL,fM).slice().reverse();
+  const dl=daily(fL,fM,fS).slice().reverse();
   renderTable({id:'tDaily', cols:DAILY_COLS, center:true, centerAll:true, fit:true,
     rows:dl.map(x=>{const d=derive(x); return {k:x.d, cells:dailyCells(x,d)};}),
-    total:(()=>{const d=derive(t);return dailyCells({d:null,leads:t.leads,mqls:t.mqls},d,true);})(),
+    total:(()=>{const d=derive(t);return dailyCells({...t,d:null},d,true);})(),
     selectable:true, selSet:STATE.selDays,
     onSelect:(k,e)=>{ toggleSet(STATE.selDays,k,e&&(e.ctrlKey||e.metaKey)); syncDateInputs(); renderAll(); },
   });
@@ -937,27 +986,27 @@ function renderMeta(){
     {key:'leads',label:'Leads',type:'int'},{key:'cpl',label:'CPL',type:'brl'},
     {key:'tx',label:'Tx‑MQL',type:'pct'},{key:'mqls',label:'MQLs',type:'int'},{key:'cpmql',label:'CPMQL',type:'brl'},
     {key:'agd',label:'AGDs',type:'int'},{key:'txag',label:'Tx‑AGD',type:'pct'},{key:'cpag',label:'CPAGD',type:'brl'},
-    {key:'convmql',label:'ConvMQL',type:'pct'},{key:'vendas',label:'Vendas',type:'int'},{key:'cac',label:'CAC',type:'brl'},
+    {key:'convagd',label:'ConvAGD',type:'pct'},{key:'vendas',label:'Vendas',type:'int'},{key:'cac',label:'CAC',type:'brl'},
     {key:'fat',label:'Fat.',type:'brl'},{key:'tm',label:'TM',type:'brl'},{key:'roas',label:'ROAS',type:'num'},
     {key:'caixa',label:'Receita',type:'brl'},{key:'roascx',label:'ROAS (C)',type:'num'},
   ];
   function hierRows(map){ return Object.entries(map).map(([k,a])=>{const d=derive(a),s=salesOf(a);
     return {k, cells:{dim:k,gasto:d.gasto,cpm:d.cpm,ctr:d.ctr,cr:d.cr,convlp:d.convlp,leads:a.leads,cpl:d.cpl,tx:d.tx,mqls:a.mqls,cpmql:d.cpmql,
       agd:s.agendamentos,txag:s.txag,cpag:s.cpag,
-      convmql:s.convmql,vendas:s.vendas,cac:s.cac,fat:s.fat,tm:s.tm,roas:s.roas,caixa:s.caixa,roascx:s.roascx}};}); }
+      convagd:s.convagd,vendas:s.vendas,cac:s.cac,fat:s.fat,tm:s.tm,roas:s.roas,caixa:s.caixa,roascx:s.roascx}};}); }
   function totRowOf(tt){const d=derive(tt),s=salesOf(tt);return{dim:null,gasto:d.gasto,cpm:d.cpm,ctr:d.ctr,cr:d.cr,convlp:d.convlp,leads:tt.leads,cpl:d.cpl,tx:d.tx,mqls:tt.mqls,cpmql:d.cpmql,
     agd:s.agendamentos,txag:s.txag,cpag:s.cpag,
-    convmql:s.convmql,vendas:s.vendas,cac:s.cac,fat:s.fat,tm:s.tm,roas:s.roas,caixa:s.caixa,roascx:s.roascx};}
+    convagd:s.convagd,vendas:s.vendas,cac:s.cac,fat:s.fat,tm:s.tm,roas:s.roas,caixa:s.caixa,roascx:s.roascx};}
   const Sc=metaScope('C'), Sa=metaScope('A'), Sd=metaScope('D');
-  const aggC=buildAgg(Sc.fL,Sc.fM,'camp'), aggA=buildAgg(Sa.fL,Sa.fM,'adset'), aggD=buildAgg(Sd.fL,Sd.fM,'ad');
+  const aggC=buildAgg(Sc.fL,Sc.fM,Sc.fS,'camp'), aggA=buildAgg(Sa.fL,Sa.fM,Sa.fS,'adset'), aggD=buildAgg(Sd.fL,Sd.fM,Sd.fS,'ad');
   // Tabelas hierárquicas: NÃO usam "fit" — a dimensão (campanha/conjunto/anúncio)
   // tem largura automática p/ caber o nome INTEIRO por padrão, nunca quebra linha,
   // é redimensionável (arrastar borda) e 2 cliques na borda auto-ajusta (Sheets/Looker).
-  renderTable({id:'tCamp', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Campanha'}:c), rows:hierRows(aggC), total:totRowOf(totals(Sc.fL,Sc.fM)),
+  renderTable({id:'tCamp', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Campanha'}:c), rows:hierRows(aggC), total:totRowOf(totals(Sc.fL,Sc.fM,Sc.fS)),
     selectable:true, selSet:STATE.mSelC, onSelect:(k,e)=>selDim('C',k,e&&(e.ctrlKey||e.metaKey))});
-  renderTable({id:'tAdset', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Conjunto',big:true}:c), rows:hierRows(aggA), total:totRowOf(totals(Sa.fL,Sa.fM)),
+  renderTable({id:'tAdset', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Conjunto',big:true}:c), rows:hierRows(aggA), total:totRowOf(totals(Sa.fL,Sa.fM,Sa.fS)),
     selectable:true, selSet:STATE.mSelA, onSelect:(k,e)=>selDim('A',k,e&&(e.ctrlKey||e.metaKey))});
-  renderTable({id:'tAd', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Anúncio'}:c), rows:hierRows(aggD), total:totRowOf(totals(Sd.fL,Sd.fM)),
+  renderTable({id:'tAd', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Anúncio'}:c), rows:hierRows(aggD), total:totRowOf(totals(Sd.fL,Sd.fM,Sd.fS)),
     selectable:true, selSet:STATE.mSelAd, onSelect:(k,e)=>selDim('D',k,e&&(e.ctrlKey||e.metaKey))});
 
   // Mar03/Mar10: cada gráfico varia a dimensão da sua tabela — MQLs por dia, 1 linha
@@ -1132,6 +1181,23 @@ document.getElementById('refreshBtn').addEventListener('click',function(){ this.
 document.getElementById('updated').innerHTML='Última atualização:<br>'+B.generated_at_brt+' (BRT)';
 document.getElementById('buildFoot').textContent='build __BUILD_ID__';
 document.getElementById('buildFoot2').textContent='· build __BUILD_ID__';
+
+/* seletor de granularidade (Diário/Semanal/Mensal/Trimestral/Semestral/Anual) —
+   injetado no cabeçalho de cada gráfico temporal; troca a agregação do eixo X ao
+   vivo (estilo Looker Studio). Default por gráfico em TEMPORAL_CHARTS. */
+function injectGranSelectors(){
+  Object.keys(TEMPORAL_CHARTS).forEach(id=>{
+    const cv=document.getElementById(id); if(!cv) return;
+    const host=cv.closest('.panel-chart')||cv.closest('.card'); if(!host||host.querySelector('.gran-sel')) return;
+    if(!(id in STATE.gran)) STATE.gran[id]=TEMPORAL_CHARTS[id];
+    const sel=document.createElement('select'); sel.className='gran-sel'; sel.title='Agregação do período';
+    sel.innerHTML=GRAN_OPTS.map(([v,l])=>`<option value="${v}"${STATE.gran[id]===v?' selected':''}>${l}</option>`).join('');
+    sel.addEventListener('change',()=>{ STATE.gran[id]=sel.value; renderAll(); });
+    host.classList.add('has-gran');
+    host.appendChild(sel);
+  });
+}
+injectGranSelectors();
 
 /* período padrão ao abrir: "Este mês" (define STATE.from/to/preset antes do 1º render) */
 (function(){ const p=PRESETS.find(x=>x[0]==='mes'); if(p){ const [f,t]=p[2](); STATE.from=f; STATE.to=t; STATE.preset='mes'; } })();

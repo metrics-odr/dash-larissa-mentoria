@@ -49,7 +49,7 @@ MAIN_PRODUCT_PREFIX = "Funil de High Ticket"
 GID_SALES = "179764332"
 
 BRT = timezone(timedelta(hours=-3))   # horario de Brasilia (exibicao)
-TAX_FACTOR = 1.0                      # sem imposto adicional informado para esta conta de mídia
+TAX_FACTOR = 1.13806                  # imposto da mídia paga (Meta) informado pela conta
 
 # --------------------------------------------------------------------------- #
 # Regras da aba Relatório (Top/Piores anúncios)
@@ -301,22 +301,33 @@ def phone_digits(p: str) -> str:
 # --------------------------------------------------------------------------- #
 # Junção com a aba "Compradores" (vendas/faturamento/caixa)
 # --------------------------------------------------------------------------- #
-def join_sales(leads: list, sales_rows: list) -> None:
+def build_sales(leads: list, sales_rows: list) -> list:
     """Cruza cada linha da aba Compradores com o lead correspondente (por
-    e-mail; se não achar, tenta os últimos 8 dígitos do telefone) e soma
-    vendas/faturamento("faturamentoVenda")/caixa("caixaVenda") na linha do
-    lead. Quando o e-mail/telefone casa com mais de um lead (a pessoa se
-    aplicou mais de uma vez), atribui a venda ao lead mais ANTIGO (primeiro
-    toque) daquele contato. Compradores sem lead correspondente nos 3 funis
-    não entram em nenhuma métrica (não há campanha/funil pra atribuir)."""
+    e-mail; se não achar, tenta os últimos 8 dígitos do telefone) e emite UM
+    registro de venda por linha — com a DATA DA VENDA (data_envio/"Data
+    Formatada"), não a data de captura do lead. Isso faz a venda aparecer no dia
+    em que aconteceu (o VLOOKUP do gestor cruzava campanha, mas jogava a métrica
+    na data errada).
+
+    Regras (pedido do cliente):
+    - Só conta como venda quem **assinou o contrato** (coluna `contratante` ==
+      "Assinou"); as demais linhas são ignoradas.
+    - A venda herda funil/temperatura/campanha/conjunto/anúncio do lead casado
+      (faz o cruzamento no código, sem VLOOKUP manual). Quando casa com mais de
+      um lead do mesmo contato, usa o mais ANTIGO (primeiro toque).
+    - `attributed=True` só quando o lead casado é de tráfego PAGO (src meta/
+      google) — essas entram na página Meta Ads. Vendas casadas com lead orgânico
+      ou sem lead correspondente ficam `attributed=False`: contam na Visão Geral
+      Total (todas as vendas), mas não no funil de tráfego pago.
+    """
     if not sales_rows:
-        return
+        return []
     sheader = sales_rows[0]
     sidx = header_index(
         sheader,
-        {"date": ["data_envio", "data"], "email": ["email"], "phone": ["telefone"],
-         "caixa": ["caixavenda"], "fat": ["faturamentovenda"]},
-        {"date": 0, "email": 4, "phone": 9, "caixa": 10, "fat": 11},
+        {"date": ["data_envio", "data formatada", "data"], "email": ["email"], "phone": ["telefone"],
+         "caixa": ["caixavenda"], "fat": ["faturamentovenda"], "contr": ["contratante"]},
+        {"date": 0, "email": 4, "phone": 9, "caixa": 10, "fat": 11, "contr": None},
     )
     def older(idx_a, idx_b):  # -> índice do lead com created mais antigo (None-safe)
         da, db = leads[idx_a]["d"] or "9999", leads[idx_b]["d"] or "9999"
@@ -330,19 +341,39 @@ def join_sales(leads: list, sales_rows: list) -> None:
         if l["_phone"]:
             by_phone[l["_phone"]] = i if l["_phone"] not in by_phone else older(by_phone[l["_phone"]], i)
 
+    contr_i = sidx.get("contr")
+    out: list = []
     for row in sales_rows[1:]:
         if not any((c or "").strip() for c in row):
+            continue
+        # Só vendas efetivamente assinadas (se a coluna existir; senão, não filtra).
+        if contr_i is not None and norm(cell(row, contr_i)) != "assinou":
             continue
         email = norm(cell(row, sidx["email"]))
         phone = phone_digits(cell(row, sidx["phone"]))
         idx = by_email.get(email) if email else None
         if idx is None and phone:
             idx = by_phone.get(phone)
-        if idx is None:
-            continue
-        leads[idx]["vendas"] += 1
-        leads[idx]["fat"] += to_float(cell(row, sidx["fat"]))
-        leads[idx]["caixa"] += to_float(cell(row, sidx["caixa"]))
+        sale = {
+            "d": parse_date(cell(row, sidx["date"])),
+            "vendas": 1,
+            "fat": to_float(cell(row, sidx["fat"])),
+            "caixa": to_float(cell(row, sidx["caixa"])),
+        }
+        if idx is not None:
+            l = leads[idx]
+            sale["funil"] = l["funil"]
+            sale["temp"] = l["temp"]
+            sale["src"] = l["src"]
+            if l["src"] in ("meta", "google"):   # venda de tráfego PAGO
+                sale.update(attributed=True, camp=l["camp"], adset=l["adset"], ad=l["ad"])
+            else:                                 # lead orgânico -> só na Visão Geral
+                sale.update(attributed=False, camp=None, adset=None, ad=None)
+        else:                                     # sem lead correspondente
+            sale.update(funil=None, temp="—", src="none",
+                        attributed=False, camp=None, adset=None, ad=None)
+        out.append(sale)
+    return out
 
 
 def process(leads_rows, meta_rows, sales_rows=None):
@@ -445,11 +476,13 @@ def process(leads_rows, meta_rows, sales_rows=None):
             "funil": funil,
             "temp": classify_temp(campaign),
             "agd": 1 if norm(cell(row, lidx["status"])) == "scheduled" else 0,
-            "vendas": 0, "fat": 0.0, "caixa": 0.0,
-            "_email": raw_email, "_phone": raw_phone,  # só para join_sales(); removidos antes do JSON final
+            "_email": raw_email, "_phone": raw_phone,  # só para build_sales(); removidos antes do JSON final
         })
 
-    join_sales(leads, sales_rows or [])
+    # Vendas: lista própria (1 registro por venda assinada) com data da venda e
+    # atribuição de funil/campanha herdada do lead casado. NÃO mais somada no
+    # lead — a agregação no navegador cruza leads + sales por data/dimensão.
+    sales = build_sales(leads, sales_rows or [])
     for l in leads:
         del l["_email"], l["_phone"]
 
@@ -521,6 +554,8 @@ def process(leads_rows, meta_rows, sales_rows=None):
         },
         "leads": leads,
         "meta": meta,
+        # Vendas (Compradores) — registros próprios com data da venda + atribuição.
+        "sales": sales,
         # Anúncio -> permalink do criativo (aba Relatório).
         "ad_links": ad_links,
         # Insights de Tráfego (texto pré-escrito, lido de relatorios.json). Preenchido
@@ -600,10 +635,12 @@ def main():
 
     b = data["build"]
     q = sum(l["q"] for l in data["leads"])
+    sv = data["sales"]
     print("== build ok ==", file=sys.stderr)
     print(f"  periodo : {b['date_min']} -> {b['date_max']}", file=sys.stderr)
     print(f"  leads   : {len(data['leads'])}  MQLs qualificados: {q}", file=sys.stderr)
     print(f"  meta    : {len(data['meta'])} linhas", file=sys.stderr)
+    print(f"  vendas  : {len(sv)} (tráfego pago: {sum(1 for s in sv if s['attributed'])})", file=sys.stderr)
     print(f"  out     : {args.out}", file=sys.stderr)
 
 

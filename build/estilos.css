@@ -112,7 +112,7 @@
      disponível — sem isso, o grid podia "vazar" e criar scroll horizontal na PÁGINA. */
   .two-col{grid-template-columns:380px minmax(0,1fr)}
   .three-col{grid-template-columns:360px minmax(0,1fr)}
-  .funnel-grid{grid-template-columns:340px minmax(0,1fr); align-items:start}
+  .funnel-grid{grid-template-columns:390px minmax(0,1fr); align-items:start}
   .funnel-charts{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-content:start}
   /* Mar02: três colunas de tamanho igual · Mar05: quatro gráficos na mesma linha */
   .trio{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; align-items:stretch}
@@ -155,7 +155,10 @@
 
   /* Funnel */
   .funnel{display:flex; flex-direction:column; gap:7px}
-  .step{display:flex; align-items:center; justify-content:space-between; gap:14px; row-gap:8px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:11px 15px; border-left:4px solid var(--accent-blue)}
+  /* nowrap por padrão: métricas curtas (Tx‑MQL/CPMQL/Tx‑AGD/CPAGD/ConvAGD/CAC…)
+     NUNCA descem de linha — só Faturamento/Receita (valores longos) podem quebrar. */
+  .step{display:flex; align-items:center; justify-content:space-between; gap:14px; row-gap:8px; flex-wrap:nowrap; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:11px 15px; border-left:4px solid var(--accent-blue)}
+  .step.hl-fat, .step.hl-rec{flex-wrap:wrap}
   .step.na{border-left-color:var(--border); opacity:.7}
   /* Destaque das etapas: MQL/Vendas (azulado) · Gasto (avermelhado) · Faturamento e Receita (verde) */
   .step.hl-mql{background:var(--step-mql-bg); border-left-color:var(--step-mql-bd)}
@@ -167,13 +170,16 @@
   .step .step-main{min-width:0}
   .step .m-label{font-size:11.5px; color:var(--muted)}
   .step .m-val{font-size:20px; font-weight:600; letter-spacing:-.02em; white-space:nowrap}
-  /* secs NUNCA quebram linha; label e valor SEMPRE lado a lado; conversão à esquerda, custo à direita */
-  .step .secs{display:flex; gap:4px 16px; flex-wrap:nowrap; justify-content:flex-end; align-items:baseline; text-align:right; flex-shrink:1; min-width:0; margin-left:auto; overflow:hidden}
-  .step .secs .sec{display:inline-flex; align-items:baseline; gap:6px; white-space:nowrap}
+  /* secs NUNCA quebram linha nem são cortadas (sem overflow:hidden); label e valor
+     SEMPRE lado a lado; conversão à esquerda, custo à direita. O m-label é que
+     pode quebrar (rótulos longos como "MQLs (Score 10 ou QLF)"), mantendo as
+     métricas curtas inteiras na mesma linha. */
+  .step .secs{display:flex; gap:4px 12px; flex-wrap:nowrap; justify-content:flex-end; align-items:baseline; text-align:right; flex:0 0 auto; margin-left:auto}
+  .step .secs .sec{display:inline-flex; align-items:baseline; gap:5px; white-space:nowrap}
   .step .secs .sec.is-cost{order:2}
   .step .secs .sec.is-conv{order:1}
-  .step .secs .s-label{font-size:10.5px; color:var(--muted); white-space:nowrap}
-  .step .secs .s-val{font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap}
+  .step .secs .s-label{font-size:10px; color:var(--muted); white-space:nowrap}
+  .step .secs .s-val{font-size:13.5px; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap}
   /* Acumulado por funil (3 colunas): funil compacto para caber sem quebrar */
   .funil-seg-card .step{padding:8px 11px}
   .funil-seg-card .step .m-val{font-size:16px}
@@ -370,3 +376,46 @@
   .rel-wa-copy{font-size:12px; font-weight:700; padding:5px 12px; border-radius:8px; border:1px solid var(--border); background:var(--accent-blue); color:#fff; cursor:pointer}
   .rel-wa-copy:hover{opacity:.9}
   .rel-wa-box{white-space:pre-wrap; word-break:break-word; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.55; margin:0; user-select:all; color:var(--ink)}
+
+  /* ==========================================================================
+     CONTROLES ESCUROS — dropdowns de filtro (sidebar) + popover de período.
+     Seguem a identidade da SIDEBAR (escuro) nos DOIS temas. Bloco no fim do
+     arquivo p/ sobrescrever as regras genéricas acima. Ver tokens --ctl-* em
+     identidade-visual.css.
+     ========================================================================== */
+  /* dropdowns de filtro (Funil / Temperatura) */
+  .side-select{background:var(--ctl-bg); color:var(--ctl-ink); border-color:var(--ctl-border)}
+  .side-select:hover{border-color:var(--ctl-accent)}
+  .side-select:focus{border-color:var(--ctl-accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--ctl-accent) 30%,transparent)}
+  .side-select option{background:var(--ctl-bg); color:var(--ctl-ink)}
+  .side-select-wrap::after{color:var(--ctl-muted)}
+
+  /* popover de período (calendário estilo Data Studio) */
+  .period-pop{background:var(--ctl-bg); border-color:var(--ctl-border); color:var(--ctl-ink); box-shadow:0 14px 44px rgba(0,0,0,.5)}
+  .period-pop .pp-presets{background:var(--ctl-elev); border-right-color:var(--ctl-border)}
+  .period-pop .pp-preset{color:var(--ctl-ink)}
+  .period-pop .pp-preset:hover{background:var(--ctl-hover); border-color:var(--ctl-border)}
+  .period-pop .pp-preset.active{background:var(--ctl-accent); border-color:var(--ctl-accent); color:#fff}
+  .period-pop .pp-cal-title,.period-pop .pp-dow span,.period-pop .pp-range{color:var(--ctl-muted)}
+  .period-pop .pp-cal-month{color:var(--ctl-ink)}
+  .period-pop .pp-nav{background:var(--ctl-elev); border-color:var(--ctl-border); color:var(--ctl-ink)}
+  .period-pop .pp-nav:hover{border-color:var(--ctl-accent); color:var(--ctl-accent)}
+  .period-pop .pp-day{color:var(--ctl-ink)}
+  .period-pop .pp-day:hover:not(.empty){border-color:var(--ctl-accent)}
+  .period-pop .pp-day.in{background:color-mix(in srgb,var(--ctl-accent) 26%,transparent)}
+  .period-pop .pp-day.sel{background:var(--ctl-accent); color:#fff}
+  .period-pop .pp-foot{background:var(--ctl-elev); border-top-color:var(--ctl-border)}
+  .period-pop .pp-foot .btn{background:var(--ctl-elev); border-color:var(--ctl-border); color:var(--ctl-ink)}
+  .period-pop .pp-foot .btn:hover{border-color:var(--ctl-accent)}
+  .period-pop .pp-foot .btn.primary{background:var(--ctl-accent); border-color:var(--ctl-accent); color:#fff}
+
+  /* ---------- seletor de granularidade (Looker Studio) nos gráficos ---------- */
+  .panel-chart.has-gran,.card.has-gran{position:relative}
+  .gran-sel{position:absolute; top:12px; right:14px; z-index:2;
+    appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    border:1px solid var(--border); background:var(--surface); color:var(--ink);
+    border-radius:8px; padding:3px 24px 3px 9px; font-size:11.5px; cursor:pointer;
+    background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+    background-position:calc(100% - 13px) 52%,calc(100% - 9px) 52%; background-size:4px 4px,4px 4px; background-repeat:no-repeat}
+  .gran-sel:hover{border-color:var(--accent-blue)}
+  .gran-sel:focus{outline:none; border-color:var(--accent-blue)}
