@@ -66,10 +66,14 @@ TOP_ADS_N = 10             # nº de linhas em Top / Piores anúncios
 # localStorage) e as tabelas de anúncios recoram CPMQL/CAC e reavaliam a
 # amostra ao vivo. None = "meta não definida" (métrica aparece sem cor até o
 # gestor preencher).
-META_CPMQL = None          # meta de CPMQL (R$/MQL); None = não definida
+META_CPAGD = None          # meta de CPAGD (R$/agendamento); None = não definida — painel da aba Relatório
 META_CAC = None            # meta de CAC (R$/venda); None = não definida
 VOLUME_MIN_AMOSTRAL = SAMPLE_MIN_MQLS  # conversões (MQLs) mínimas p/ amostra confiável
-N_DIAS_CORTE = 5           # dias consecutivos acima do teto p/ considerar corte
+# CPMQL/N dias: NÃO aparecem mais no painel da aba Relatório (trocados por CPAGD),
+# mas continuam aqui porque o pipeline de briefing (coletar_dados_relatorio.py /
+# gerar_relatorios.py / relatorio_lib.funnel_health) ainda os usa p/ a nota de saúde.
+META_CPMQL = None          # meta de CPMQL (R$/MQL) — só briefing
+N_DIAS_CORTE = 5           # dias consecutivos acima do teto p/ considerar corte — só briefing
 
 
 # --------------------------------------------------------------------------- #
@@ -262,6 +266,31 @@ def cell(row, i):
     return (row[i] or "").strip()
 
 
+def find_indices(header, aliases):
+    """Retorna TODOS os índices de coluna cujo cabeçalho casa com algum alias
+    (igualdade ou substring, sem acento). Usado p/ COALESCER perguntas que têm
+    variações por funil (APD-BR / APD-MUNDO / DIAG usam colunas diferentes p/ a
+    mesma pergunta, preenchidas de forma mutuamente exclusiva)."""
+    hn = [norm(h) for h in header]
+    idxs = []
+    for a in aliases:
+        a = norm(a)
+        for i, h in enumerate(hn):
+            if (h == a or (a and a in h)) and i not in idxs:
+                idxs.append(i)
+    return idxs
+
+
+def coalesce(row, idxs):
+    """Primeiro valor não-vazio entre as colunas indicadas (para campos com
+    variantes por funil)."""
+    for i in idxs:
+        v = cell(row, i)
+        if v:
+            return v
+    return ""
+
+
 # --------------------------------------------------------------------------- #
 # Processamento -> registros brutos
 # --------------------------------------------------------------------------- #
@@ -337,6 +366,32 @@ def process(leads_rows, meta_rows, sales_rows=None):
          "qlf": None, "score": 16, "name": 7, "email": 8, "phone": 9},
     )
 
+    # Perguntas do formulário com VARIANTES por funil (APD-BR / APD-MUNDO / DIAG):
+    # coletamos todas as colunas casadas e usamos o 1º valor não-vazio por lead.
+    lhdr = lheader
+    IDX_PAIS = find_indices(lhdr, ["país", "em qual país você mora atualmente"])
+    IDX_ESTADO = find_indices(lhdr, ["estado"])
+    IDX_MOMENTO = find_indices(lhdr, [
+        "qual é o seu momento profissional atual",
+        "em qual situação profissional você está hoje",
+        "hoje, como você atua profissionalmente"])
+    IDX_EXP = find_indices(lhdr, [
+        "você já tem experiência com terapias",
+        "você tem alguma formação ou curso na área de desenvolvimento humano"])
+    IDX_RESULTADO = find_indices(lhdr, ["qual é o principal resultado que você quer alcançar"])
+    IDX_INVESTIR = find_indices(lhdr, ["você estaria disposta a investir neste momento"])
+    IDX_RETORNO = find_indices(lhdr, [
+        "quanto você acredita que pode multiplicar",
+        "qual nível de resultado financeiro você acredita ser possível"])
+    IDX_LEADSCORE = find_indices(lhdr, ["leadscore"])
+    IDX_RENDA = find_indices(lhdr, [
+        "renda mensal familiar",
+        "na moeda do seu país, qual é a sua renda mensal",
+        "renda mensal individual"])
+
+    def clean_txt(v):
+        return v.strip() if v and v.strip() else "Sem resposta"
+
     leads = []
     for row in leads_rows[1:]:
         if not any((c or "").strip() for c in row):
@@ -358,9 +413,12 @@ def process(leads_rows, meta_rows, sales_rows=None):
             src = "meta"
         else:
             src = "outros"
-        fat = cell(row, lidx["faturamento"])
+        # Faixa de renda UNIFICADA (6.4a): coalesce das colunas de renda (familiar /
+        # moeda do país / individual) — evita faixa em branco/dividida entre funis.
+        renda_raw = coalesce(row, IDX_RENDA)
         raw_email = norm(cell(row, lidx["email"]))
         raw_phone = phone_digits(cell(row, lidx["phone"]))
+        leadscore = coalesce(row, IDX_LEADSCORE).strip().upper()[:1] or "—"
         leads.append({
             "d": parse_date(cell(row, lidx["created"])),
             "src": src,
@@ -369,7 +427,16 @@ def process(leads_rows, meta_rows, sales_rows=None):
             "adset": cell(row, lidx["adset_name"]) or "(sem conjunto)",
             "ad": cell(row, lidx["ad_name"]) or "(sem anúncio)",
             "prof": (cell(row, lidx["profession"]) or "Sem resposta").replace("_", " ").capitalize(),
-            "bucket": pretty_bucket(fat),
+            "bucket": pretty_bucket(renda_raw),
+            # respostas do formulário (coalescidas por funil) — aba Distribuição de leads
+            "pais": clean_txt(coalesce(row, IDX_PAIS)),
+            "estado": clean_txt(coalesce(row, IDX_ESTADO)),
+            "momento": clean_txt(coalesce(row, IDX_MOMENTO)),
+            "exp": clean_txt(coalesce(row, IDX_EXP)),
+            "resultado": clean_txt(coalesce(row, IDX_RESULTADO)),
+            "investir": clean_txt(coalesce(row, IDX_INVESTIR)),
+            "retorno": clean_txt(coalesce(row, IDX_RETORNO)),
+            "leadscore": leadscore,
             "q": 1 if is_qualified(cell(row, lidx["qlf"]), cell(row, lidx["score"])) else 0,
             "utm": 1 if valid_utm(campaign) else 0,
             "nm": first_last_initial(cell(row, lidx["name"])),
@@ -446,10 +513,9 @@ def process(leads_rows, meta_rows, sales_rows=None):
             "sample_min_mqls": SAMPLE_MIN_MQLS,
             "top_ads_n": TOP_ADS_N,
             # metas & parâmetros (defaults do painel editável; None = não definida)
-            "meta_cpmql": META_CPMQL,
+            "meta_cpagd": META_CPAGD,
             "meta_cac": META_CAC,
             "volume_min_amostral": VOLUME_MIN_AMOSTRAL,
-            "n_dias_corte": N_DIAS_CORTE,
             # opções do dropdown de funil (Visão Geral Total / filtro global)
             "funis": ["APD-BR", "APD-MUNDO", "DIAG"],
         },
