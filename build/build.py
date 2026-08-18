@@ -342,12 +342,36 @@ def build_sales(leads: list, sales_rows: list) -> list:
             by_phone[l["_phone"]] = i if l["_phone"] not in by_phone else older(by_phone[l["_phone"]], i)
 
     contr_i = sidx.get("contr")
+    # Data da VENDA: prioriza data_envio / "Data Formatada"; NUNCA "Data Cadastro"
+    # (essa é a data do lead, com "Não Encontrado"). Coalesce por linha porque uma
+    # coluna pode vir vazia enquanto a outra tem o valor.
+    date_idxs = find_indices(sheader, ["data_envio", "data formatada"]) or (
+        [sidx["date"]] if sidx.get("date") is not None else [])
+
+    def sale_date(row):
+        for i in date_idxs:
+            d = parse_date(cell(row, i))
+            if d:
+                return d
+        return None
+
+    def is_signed(row):
+        """Robusto a encodings da coluna `contratante`: aceita "Assinou",
+        "✅ Assinou", checkbox exportado como TRUE/Sim/1, "Contrato assinado";
+        rejeita negações ("Não assinou", cancelado, distrato, reembolso, FALSE).
+        Se a coluna não existir, não filtra (conta todas)."""
+        if contr_i is None:
+            return True
+        v = norm(cell(row, contr_i))
+        if any(n in v for n in ("nao", "cancel", "distrat", "reembol", "estorn", "false")):
+            return False                       # negação explícita -> não assinou
+        return ("assinou" in v or "assinad" in v or v in ("true", "sim", "1", "verdadeiro", "x"))
+
     out: list = []
     for row in sales_rows[1:]:
         if not any((c or "").strip() for c in row):
             continue
-        # Só vendas efetivamente assinadas (se a coluna existir; senão, não filtra).
-        if contr_i is not None and norm(cell(row, contr_i)) != "assinou":
+        if not is_signed(row):   # só vendas efetivamente assinadas
             continue
         email = norm(cell(row, sidx["email"]))
         phone = phone_digits(cell(row, sidx["phone"]))
@@ -355,7 +379,7 @@ def build_sales(leads: list, sales_rows: list) -> list:
         if idx is None and phone:
             idx = by_phone.get(phone)
         sale = {
-            "d": parse_date(cell(row, sidx["date"])),
+            "d": sale_date(row),
             "vendas": 1,
             "fat": to_float(cell(row, sidx["fat"])),
             "caixa": to_float(cell(row, sidx["caixa"])),
