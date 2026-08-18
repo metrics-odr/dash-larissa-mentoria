@@ -26,6 +26,11 @@
   --step-mql-bg:#EAF0FF; --step-mql-bd:#3B5BDB;
   --step-gasto-bg:#FDECEC; --step-gasto-bd:#E34948;
   --step-fat-bg:#E9F7EE; --step-fat-bd:#0CA30C;
+  /* Controles ESCUROS (dropdowns de filtro + popover de período) — seguem a
+     identidade da SIDEBAR (escuro) em AMBOS os temas, por isso ficam no :root e
+     não são sobrescritos no bloco dark. */
+  --ctl-bg:#20242F; --ctl-elev:#2A2F3D; --ctl-ink:#EEF0F5; --ctl-muted:#9AA1AD;
+  --ctl-border:#3A4051; --ctl-hover:#333A4B; --ctl-accent:#5B7BF0;
 }
 
 /* ------------------------------ TEMA ESCURO (toggle) ----------------------- */
