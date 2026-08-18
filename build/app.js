@@ -24,10 +24,12 @@ function addDays(s,n){const dt=new Date(s+'T00:00:00');dt.setDate(dt.getDate()+n
 const TODAY = B.today || B.date_max;
 
 /* ---------------- STATE ---------------- */
+const FUNIS = B.funis || ['APD-BR','APD-MUNDO','DIAG'];
 const STATE = {
   page:'geral', from:B.date_min, to:B.date_max, preset:'todo', tax:true,
   selDays:new Set(),
   mSelC:new Set(), mSelA:new Set(), mSelAd:new Set(),
+  filterFunil:'', filterTemp:'',
   sort:{}, colw: JSON.parse(localStorage.getItem('dm_colw')||'{}'),
 };
 const taxf = ()=> STATE.tax ? TAX : 1;
@@ -38,8 +40,15 @@ function dateActive(d){
   if(STATE.selDays.size) return STATE.selDays.has(d);
   return (!STATE.from || d>=STATE.from) && (!STATE.to || d<=STATE.to);
 }
-const leadsActive = ()=> LEADS.filter(l=>dateActive(l.d));
-const metaActive  = ()=> META.filter(m=>dateActive(m.d));
+/* filtro global de Funil (DIAG/APD-BR/APD-MUNDO) e Temperatura (Quente/Frio) —
+   dropdowns na topbar, aplicados a todas as páginas (leads e mídia paga). */
+function funilTempMatch(r){
+  if(STATE.filterFunil && r.funil!==STATE.filterFunil) return false;
+  if(STATE.filterTemp && r.temp!==STATE.filterTemp) return false;
+  return true;
+}
+const leadsActive = ()=> LEADS.filter(l=>dateActive(l.d) && funilTempMatch(l));
+const metaActive  = ()=> META.filter(m=>dateActive(m.d) && funilTempMatch(m));
 
 /* ---------------- aggregation ---------------- */
 function derive(a){
@@ -50,54 +59,62 @@ function derive(a){
     convlp:pv?a.leads/pv:null,
     cpl:a.leads?g/a.leads:null, cpmql:a.mqls?g/a.mqls:null, tx:a.leads?a.mqls/a.leads:null};
 }
-/* --------- FUNIL PROFUNDO: Agendamento → Reunião Realizada → Venda (aguardando dados) ---------
-   Funil de venda 1:1 por reunião (ajuste o nome/etapa do funil ao cliente novo):
-     Impressões → Cliques → Leads → MQLs → Agendamentos → Reuniões Realizadas → Vendas → Faturamento.
-   Quando a fonte do comercial chegar, some `agendamentos`, `reunioes`,
-   `vendas` e `fat` por linha em buildAgg/daily/totals e TODA a UI acende sozinha
-   (funil, cards, colunas das tabelas, Top/Piores anúncios). Enquanto não houver,
-   cada métrica derivada retorna null -> "-". */
+/* --------- FUNIL: MQL → Agendamento → Venda (Faturamento/Receita) ---------
+   Funil de High Ticket: Impressões → Cliques → Leads → MQLs → Agendamentos →
+   Vendas → Faturamento/Receita. "Reunião Realizada" não existe como fonte
+   própria (a planilha do comercial não distingue reunião de venda) — fica
+   sempre "-"; se um dia vier, some `reunioes` em buildAgg/daily/totals que a
+   UI acende sozinha. Faturamento ("faturamentoVenda") e Receita/Caixa
+   ("caixaVenda") são rastreados em paralelo, cada um com seu ROAS/Ticket
+   (espelha "ROAS (F)/(C)" e "Ticket Médio (F)/(C)" do relatório antigo). */
 function salesOf(a){
   const g=(a?a.sp:0)*taxf();
   const mqls=(a&&a.mqls)||0;
   const agendamentos=(a&&a.agendamentos)||0, reunioes=(a&&a.reunioes)||0;
-  const vendas=(a&&a.vendas)||0, fat=(a&&a.fat)||0;
-  const hasAg=agendamentos>0, hasRe=reunioes>0, hasVd=vendas>0||fat>0;
+  const vendas=(a&&a.vendas)||0, fat=(a&&a.fat)||0, caixa=(a&&a.caixa)||0;
+  const hasAg=agendamentos>0, hasRe=reunioes>0, hasVd=vendas>0||fat>0||caixa>0;
   return {
     // MQL → Agendamento
     agendamentos: hasAg?agendamentos:null,
     txag:         hasAg&&mqls?agendamentos/mqls:null,     // agendamentos / MQLs
     cpag:         hasAg?g/agendamentos:null,               // custo por agendamento
-    // Agendamento → Reunião Realizada
+    // Agendamento → Reunião Realizada (sem fonte própria hoje -> "-")
     reunioes:     hasRe?reunioes:null,
     txnoshow:     hasRe&&hasAg?1-(reunioes/agendamentos):null,  // no-show = 1 - comparecimento
     cprr:         hasRe?g/reunioes:null,                   // custo por reunião realizada
-    // Reunião Realizada → Venda
+    // Agendamento/Reunião → Venda
     vendas:       hasVd?vendas:null,
     txvenda:      hasVd&&hasRe?vendas/reunioes:null,       // vendas / reuniões realizadas
-    fat:          hasVd?fat:null,
     cac:          hasVd&&vendas?g/vendas:null,
+    convmql:      hasVd&&mqls?vendas/mqls:null,
+    // Faturamento (valor total do contrato/venda)
+    fat:          hasVd?fat:null,
     roas:         hasVd&&g?fat/g:null,
     tm:           hasVd&&vendas?fat/vendas:null,
-    convmql:      hasVd&&mqls?vendas/mqls:null,
+    // Receita / Caixa (valor efetivamente recebido)
+    caixa:        hasVd?caixa:null,
+    roascx:       hasVd&&g?caixa/g:null,
+    tmcx:         hasVd&&vendas?caixa/vendas:null,
   };
 }
 function buildAgg(fL,fM,dim){
   const m={};
-  const get=k=>m[k]||(m[k]={sp:0,im:0,cl:0,pv:0,leads:0,mqls:0});
+  const get=k=>m[k]||(m[k]={sp:0,im:0,cl:0,pv:0,leads:0,mqls:0,agendamentos:0,vendas:0,fat:0,caixa:0});
   fM.forEach(r=>{const a=get(r[dim]); a.sp+=r.sp; a.im+=r.im; a.cl+=r.cl; a.pv+=r.pv;});
-  fL.forEach(r=>{const a=get(r[dim]); a.leads+=1; a.mqls+=r.q;});
+  fL.forEach(r=>{const a=get(r[dim]); a.leads+=1; a.mqls+=r.q; a.agendamentos+=r.agd||0; a.vendas+=r.vendas||0; a.fat+=r.fat||0; a.caixa+=r.caixa||0;});
   return m;
 }
 function totals(fL,fM){
   let sp=0,im=0,cl=0,pv=0; fM.forEach(r=>{sp+=r.sp;im+=r.im;cl+=r.cl;pv+=r.pv;});
-  return {sp, im, cl, pv, leads:fL.length, mqls:fL.reduce((s,r)=>s+r.q,0)};
+  let mqls=0,agendamentos=0,vendas=0,fat=0,caixa=0;
+  fL.forEach(r=>{mqls+=r.q; agendamentos+=r.agd||0; vendas+=r.vendas||0; fat+=r.fat||0; caixa+=r.caixa||0;});
+  return {sp, im, cl, pv, leads:fL.length, mqls, agendamentos, vendas, fat, caixa};
 }
 /* daily aggregation for a source pair */
 function daily(fL,fM){
-  const days={}; const g=d=>days[d]||(days[d]={d, sp:0,im:0,cl:0,pv:0,leads:0,mqls:0});
+  const days={}; const g=d=>days[d]||(days[d]={d, sp:0,im:0,cl:0,pv:0,leads:0,mqls:0,agendamentos:0,vendas:0,fat:0,caixa:0});
   fM.forEach(r=>{if(!r.d)return; const a=g(r.d); a.sp+=r.sp; a.im+=r.im; a.cl+=r.cl; a.pv+=r.pv;});
-  fL.forEach(r=>{if(!r.d)return; const a=g(r.d); a.leads+=1; a.mqls+=r.q;});
+  fL.forEach(r=>{if(!r.d)return; const a=g(r.d); a.leads+=1; a.mqls+=r.q; a.agendamentos+=r.agd||0; a.vendas+=r.vendas||0; a.fat+=r.fat||0; a.caixa+=r.caixa||0;});
   return Object.values(days).sort((a,b)=>a.d<b.d?-1:1);
 }
 
@@ -385,24 +402,47 @@ function kpiCard(k){ return `<div class="kpi ${k.hero?'hero':''}"><div class="kl
    MESMO corpo (renderGeralCore), só mudam os alvos no DOM. */
 const GERAL_IDS={funnel:'geralFunnel',kpis2:'geralKpis2',combo:'gCombo',source:'gSource',bucket:'gBucket',plat:'gPlat',prof:'gProf',daily:'gDaily'};
 const REL_IDS  ={funnel:'relFunnel', kpis2:'relKpis2', combo:'rCombo',source:'rSource',bucket:'rBucket',plat:'rPlat',prof:'rProf',daily:'rDaily'};
-function renderGeral(){ renderGeralCore(GERAL_IDS); }
+function renderGeral(){ renderGeralCore(GERAL_IDS); renderFunilSegments(); }
+/* Segmentação por funil (Visão Geral Total): abaixo do acumulado total, um
+   card compacto por funil (APD-BR / APD-MUNDO / DIAG) com os mesmos KPIs
+   principais — respeita o filtro global de funil/temperatura e o período
+   ativo (mesma base leadsActive()/metaActive() da Visão Geral). */
+function renderFunilSegments(){
+  const host=document.getElementById('geralFunis'); if(!host) return;
+  const fL=leadsActive(), fM=metaActive();
+  host.innerHTML = FUNIS.map(fn=>{
+    const sL=fL.filter(l=>l.funil===fn), sM=fM.filter(m=>m.funil===fn);
+    const t=totals(sL,sM), dv=derive(t), s=salesOf(t);
+    const cards=[
+      {label:'Gasto',val:brl(dv.gasto)},
+      {label:'Leads',val:intf(t.leads),aux:'CPL '+brl(dv.cpl)},
+      {label:'MQLs',val:intf(t.mqls),aux:'CPMQL '+brl(dv.cpmql)},
+      {label:'Agendamentos',val:intf(s.agendamentos),aux:'CPAGD '+brl(s.cpag)},
+      {label:'Tx‑AGD',val:pct(s.txag)},
+      {label:'Vendas',val:intf(s.vendas),aux:'CAC '+brl(s.cac)},
+      {label:'Faturamento',val:brl(s.fat),aux:'ROAS '+numf(s.roas)},
+      {label:'Receita (Caixa)',val:brl(s.caixa),aux:'ROAS(C) '+numf(s.roascx)},
+    ];
+    return `<div class="card funil-seg-card"><h3>${fn}</h3><div class="kpis n1">${cards.map(kpiCard).join('')}</div></div>`;
+  }).join('');
+}
 function renderGeralCore(ids){
   const fL=leadsActive(), fM=metaActive();
-  const t=totals(fL,fM), dv=derive(t), g=dv.gasto;
+  const t=totals(fL,fM), dv=derive(t), s=salesOf(t), g=dv.gasto;
   const leadsAds=fL.filter(l=>l.src==='meta'||l.src==='google');
   const nAds=leadsAds.length, mqlsAds=leadsAds.reduce((s,r)=>s+r.q,0);
   const nOrg=fL.filter(l=>l.src==='org').length;
   const semUtm=fL.filter(l=>!l.utm).length, comUtm=t.leads-semUtm;
-  const NA='<span class="na-tag">sem dado</span>';
   const steps=[
     ['Gasto Total', brl(g), [], false, 'hl-gasto'],
     ['Impressões', intf(t.im), [['CPM',brl(dv.cpm)]]],
     ['Cliques', intf(t.cl), [['CTR',pct(dv.ctr)],['CPC',brl(dv.cpc)]]],
     ['Page Views', intf(t.pv), [['CR',pct(dv.cr)],['CPV',brl(dv.cpv)]]],
     ['Leads', intf(t.leads), [['CPL',brl(dv.cpl)],['ConvLP',pct(dv.convlp)]]],
-    ['MQLs (<<PREENCHER: limiar de qualificação>>)', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
-    ['Vendas', NA, [['CAC',NA]], true],
-    ['Faturamento', NA, [['ROAS',NA],['Ticket',NA]], true],
+    ['MQLs (Score 10 ou QLF)', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
+    ['Agendamentos', intf(s.agendamentos), [['Tx‑AGD',pct(s.txag)],['CPAGD',brl(s.cpag)]]],
+    ['Vendas', intf(s.vendas), [['CAC',brl(s.cac)]], false, 'hl-mql'],
+    ['Faturamento', brl(s.fat), [['ROAS',numf(s.roas)],['Ticket',brl(s.tm)]], false, 'hl-gasto'],
   ];
   document.getElementById(ids.funnel).innerHTML=funnelHTML(steps);
   // ---- Mar05: métricas secundárias mais úteis (não repetem o funil) ----
@@ -426,6 +466,10 @@ function renderGeralCore(ids){
     {label:'% Eficácia Rastr.',val:pct(t.leads?comUtm/t.leads:null),aux:'Leads c/ UTM / Leads'},
     {label:'Leads Orgânicos',val:intf(nOrg),aux:'sem fonte paga'},
     {label:'Proporção Org:Ads',val:nOrg?numf(nAds/nOrg)+':1':(nAds?'∞':'-'),aux:'Ads por orgânico'},
+    {label:'Receita (Caixa)',val:brl(s.caixa),aux:'valor efetivamente recebido'},
+    {label:'ROAS (Caixa)',val:numf(s.roascx),aux:'Receita / Gasto'},
+    {label:'Ticket Médio (Caixa)',val:brl(s.tmcx),aux:'Receita / Vendas'},
+    {label:'Ticket Médio (Faturamento)',val:brl(s.tm),aux:'Faturamento / Vendas'},
   ];
   document.getElementById(ids.kpis2).innerHTML=k2.map(kpiCard).join('');
   comboChart(ids.combo, daily(fL,fM));
@@ -435,7 +479,9 @@ function renderGeralCore(ids){
   hbar(ids.source, Object.entries(bySrc).map(([label,leads])=>({label,leads})), x=>x.leads, ()=>cvar('--chart-leads'));
   // por faixa
   const byB={}; fL.forEach(l=>{byB[l.bucket]=byB[l.bucket]||{label:l.bucket,leads:0,q:l.q}; byB[l.bucket].leads++;});
-  const order=['<<PREENCHER: ordem das faixas de faturamento/qualificação do cliente novo, ex. "Menos de R$X",...,"Mais de R$Y">>','Sem resposta'];
+  const order=['Até 1.500','Até r$ 2.500','Até 2.500','De 1.500 a 2.500','De 2.500 a 5.000','De 3.000 a 5.000',
+    'De 5.000 a 8.000','De 5.000 a 10.000','De 8.000 a 10.000','De 10.000 a 12.000','De 12.000 a 20.000',
+    'Acima de 8.000','Acima de 20.000','Sem resposta'];
   const bArr=Object.values(byB).sort((a,b)=>order.indexOf(a.label)-order.indexOf(b.label));
   hbar(ids.bucket, bArr, x=>x.leads, x=>x.q?cvar('--bar-q'):cvar('--bar-noq'));
   // por plataforma
@@ -754,15 +800,17 @@ const DAILY_COLS=[
   {key:'ctr',label:'CTR',type:'pct'},{key:'cr',label:'CR',type:'pct'},{key:'convlp',label:'ConvLP',type:'pct'},
   {key:'leads',label:'Leads',type:'int',heat:'leads'},{key:'cpl',label:'CPL',type:'brl'},
   {key:'tx',label:'Tx‑MQL',type:'pct'},{key:'mqls',label:'MQLs',type:'int',heat:'mqls'},{key:'cpmql',label:'CPMQL',type:'brl'},
-  // Mar01: métricas de venda (aguardando aba de compradores -> "-")
+  {key:'agd',label:'AGDs',type:'int'},{key:'txag',label:'Tx‑AGD',type:'pct'},{key:'cpag',label:'CPAGD',type:'brl'},
   {key:'vendas',label:'Vendas',type:'int'},{key:'cac',label:'CAC',type:'brl'},
   {key:'fat',label:'Fat.',type:'brl'},{key:'tm',label:'TM',type:'brl'},{key:'roas',label:'ROAS',type:'num'},
+  {key:'caixa',label:'Receita',type:'brl'},{key:'roascx',label:'ROAS (C)',type:'num'},
 ];
 function dailyCells(x,d,isTotal){
   const s=salesOf(x);
   return {date:isTotal?null:x.d, wd:isTotal?'':weekday(x.d), gasto:d.gasto, cpm:d.cpm, ctr:d.ctr, cr:d.cr, convlp:d.convlp,
     leads:x.leads, cpl:d.cpl, tx:d.tx, mqls:x.mqls, cpmql:d.cpmql,
-    vendas:s.vendas, cac:s.cac, fat:s.fat, tm:s.tm, roas:s.roas};
+    agd:s.agendamentos, txag:s.txag, cpag:s.cpag,
+    vendas:s.vendas, cac:s.cac, fat:s.fat, tm:s.tm, roas:s.roas, caixa:s.caixa, roascx:s.roascx};
 }
 
 /* ---------------- PAGE 2: Captura Meta Ads ---------------- */
@@ -784,7 +832,7 @@ function selDim(dim,key,ctrl){
 }
 function renderMeta(){
   const F=metaScope(null), fL=F.fL, fM=F.fM;   // KPIs, funil, graficos e tabela diaria
-  const t=totals(fL,fM), dv=derive(t), g=dv.gasto;
+  const t=totals(fL,fM), dv=derive(t), s=salesOf(t), g=dv.gasto;
   const NA='<span class="na-tag">sem dado</span>';
   const steps=[
     ['Gasto Total', brl(g), [], false, 'hl-gasto'],
@@ -792,9 +840,10 @@ function renderMeta(){
     ['Cliques', intf(t.cl), [['CTR',pct(dv.ctr)],['CPC',brl(dv.cpc)]]],
     ['Page Views', intf(t.pv), [['CR',pct(dv.cr)],['CPV',brl(dv.cpv)]]],
     ['Leads', intf(t.leads), [['CPL',brl(dv.cpl)],['ConvLP',pct(dv.convlp)]]],
-    ['MQLs (<<PREENCHER: limiar de qualificação>>)', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
-    ['Vendas', NA, [['ConvMQL',NA],['CAC',NA]], true],
-    ['Faturamento', NA, [['ROAS',NA],['Ticket',NA]], true],
+    ['MQLs (Score 10 ou QLF)', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
+    ['Agendamentos', intf(s.agendamentos), [['Tx‑AGD',pct(s.txag)],['CPAGD',brl(s.cpag)]]],
+    ['Vendas', intf(s.vendas), [['ConvMQL',pct(s.convmql)],['CAC',brl(s.cac)]], false, 'hl-mql'],
+    ['Faturamento', brl(s.fat), [['ROAS',numf(s.roas)],['Ticket',brl(s.tm)]], false, 'hl-gasto'],
   ];
   document.getElementById('metaFunnel').innerHTML=funnelHTML(steps);
 
@@ -830,15 +879,18 @@ function renderMeta(){
     {key:'ctr',label:'CTR',type:'pct'},{key:'cr',label:'CR',type:'pct'},{key:'convlp',label:'ConvLP',type:'pct'},
     {key:'leads',label:'Leads',type:'int'},{key:'cpl',label:'CPL',type:'brl'},
     {key:'tx',label:'Tx‑MQL',type:'pct'},{key:'mqls',label:'MQLs',type:'int'},{key:'cpmql',label:'CPMQL',type:'brl'},
-    // Mar03: métricas de venda (aguardando aba de compradores -> "-")
+    {key:'agd',label:'AGDs',type:'int'},{key:'txag',label:'Tx‑AGD',type:'pct'},{key:'cpag',label:'CPAGD',type:'brl'},
     {key:'convmql',label:'ConvMQL',type:'pct'},{key:'vendas',label:'Vendas',type:'int'},{key:'cac',label:'CAC',type:'brl'},
     {key:'fat',label:'Fat.',type:'brl'},{key:'tm',label:'TM',type:'brl'},{key:'roas',label:'ROAS',type:'num'},
+    {key:'caixa',label:'Receita',type:'brl'},{key:'roascx',label:'ROAS (C)',type:'num'},
   ];
   function hierRows(map){ return Object.entries(map).map(([k,a])=>{const d=derive(a),s=salesOf(a);
     return {k, cells:{dim:k,gasto:d.gasto,cpm:d.cpm,ctr:d.ctr,cr:d.cr,convlp:d.convlp,leads:a.leads,cpl:d.cpl,tx:d.tx,mqls:a.mqls,cpmql:d.cpmql,
-      convmql:s.convmql,vendas:s.vendas,cac:s.cac,fat:s.fat,tm:s.tm,roas:s.roas}};}); }
+      agd:s.agendamentos,txag:s.txag,cpag:s.cpag,
+      convmql:s.convmql,vendas:s.vendas,cac:s.cac,fat:s.fat,tm:s.tm,roas:s.roas,caixa:s.caixa,roascx:s.roascx}};}); }
   function totRowOf(tt){const d=derive(tt),s=salesOf(tt);return{dim:null,gasto:d.gasto,cpm:d.cpm,ctr:d.ctr,cr:d.cr,convlp:d.convlp,leads:tt.leads,cpl:d.cpl,tx:d.tx,mqls:tt.mqls,cpmql:d.cpmql,
-    convmql:s.convmql,vendas:s.vendas,cac:s.cac,fat:s.fat,tm:s.tm,roas:s.roas};}
+    agd:s.agendamentos,txag:s.txag,cpag:s.cpag,
+    convmql:s.convmql,vendas:s.vendas,cac:s.cac,fat:s.fat,tm:s.tm,roas:s.roas,caixa:s.caixa,roascx:s.roascx};}
   const Sc=metaScope('C'), Sa=metaScope('A'), Sd=metaScope('D');
   const aggC=buildAgg(Sc.fL,Sc.fM,'camp'), aggA=buildAgg(Sa.fL,Sa.fM,'adset'), aggD=buildAgg(Sd.fL,Sd.fM,'ad');
   // Tabelas hierárquicas: NÃO usam "fit" — a dimensão (campanha/conjunto/anúncio)
@@ -961,7 +1013,7 @@ function setPage(p){ STATE.page=p;
   document.getElementById('page-geral').classList.toggle('active',p==='geral');
   document.getElementById('page-meta').classList.toggle('active',p==='meta');
   document.getElementById('page-rel').classList.toggle('active',p==='rel');
-  document.getElementById('ptitle').textContent = p==='meta'?'Captura Meta Ads':(p==='rel'?'Relatório':'Visão Geral de Leads');
+  document.getElementById('ptitle').textContent = p==='meta'?'Captura Meta Ads':(p==='rel'?'Relatório':'Visão Geral Total');
   document.getElementById('navToggle').checked=false;
   history.replaceState(null,'', p==='meta'?'#meta':(p==='rel'?'#rel':'#geral'));
   renderAll();
@@ -981,7 +1033,21 @@ document.getElementById('ppCancel').addEventListener('click',ppClose);
 document.getElementById('periodPop').addEventListener('click',e=>e.stopPropagation());
 document.addEventListener('click',()=>{ if(ppIsOpen()) ppClose(); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&ppIsOpen()) ppClose(); });
-document.getElementById('clearBtn').addEventListener('click',()=>{ STATE.mSelC.clear();STATE.mSelA.clear();STATE.mSelAd.clear();STATE.selDays.clear(); applyPreset('mes'); });
+document.getElementById('clearBtn').addEventListener('click',()=>{ STATE.mSelC.clear();STATE.mSelA.clear();STATE.mSelAd.clear();STATE.selDays.clear();
+  STATE.filterFunil=''; STATE.filterTemp=''; syncFunilFilters(); applyPreset('mes'); });
+/* filtro global: Funil (DIAG/APD-BR/APD-MUNDO) e Temperatura (Quente/Frio) —
+   afeta leadsActive()/metaActive() em todas as páginas (topbar). */
+function syncFunilFilters(){
+  const fe=document.getElementById('filterFunil'), te=document.getElementById('filterTemp');
+  if(fe) fe.value=STATE.filterFunil; if(te) te.value=STATE.filterTemp;
+}
+(function wireFunilFilters(){
+  const fe=document.getElementById('filterFunil'), te=document.getElementById('filterTemp');
+  if(fe){ fe.innerHTML='<option value="">Todos os funis</option>'+FUNIS.map(f=>`<option value="${f}">${f}</option>`).join('');
+    fe.addEventListener('change',()=>{ STATE.filterFunil=fe.value; renderAll(); }); }
+  if(te){ te.addEventListener('change',()=>{ STATE.filterTemp=te.value; renderAll(); }); }
+  syncFunilFilters();
+})();
 document.getElementById('refreshBtn').addEventListener('click',function(){ this.classList.add('loading'); location.href=location.pathname+'?t='+Date.now()+location.hash; });
 
 /* painel de Metas & parâmetros — edita ao vivo, salva em localStorage e recolore
