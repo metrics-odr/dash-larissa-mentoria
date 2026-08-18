@@ -1,0 +1,15 @@
+{
+  "generated_at": null,
+  "generated_at_iso": null,
+  "fonte": "Números brutos agregados a partir do funil (mídia paga × Leads) — insumo para a Routine do Claude escrever build/relatorios.json (Insights de Tráfego). Sem interpretação/texto aqui, só aritmética. Vazio no template — gerado automaticamente por build/coletar_dados_relatorio.py (.github/workflows/briefing.yml) assim que houver dados reais do cliente.",
+  "params": {
+    "tax_factor": 1.0,
+    "sample_min_spend": 100.0,
+    "sample_min_mqls": 3,
+    "meta_cpmql": null,
+    "meta_cac": null,
+    "volume_min_amostral": 3,
+    "n_dias_corte": 5
+  },
+  "periodos": {}
+}
