@@ -1,12 +1,12 @@
-# Dashboard de Captura de Leads · <<PREENCHER: nome do cliente>>
+# Dashboard de Captura de Leads · Mentoria Versalhes
 
-Dashboard **100% na nuvem** que cruza a lista de **Leads** (<<PREENCHER: nome/
-sigla do funil e da oferta do cliente>>) com o investimento de mídia paga
-(**Meta Ads**), calcula os **Leads Qualificados** e é publicada no **GitHub
-Pages**. Reconstrói sozinha a cada ~30 min, disparada pelo **cron-job.org** —
-sem depender de nenhum PC ligado.
+Dashboard **100% na nuvem** que cruza a lista de **Leads** (Funil de High
+Ticket — Aplicação Direta BR/Mundo e Diagnóstico) com o investimento de mídia
+paga (**Meta Ads**) e as vendas (**Compradores**), calcula os **Leads
+Qualificados** e é publicada no **GitHub Pages**. Reconstrói sozinha a cada
+~30 min, disparada pelo **cron-job.org** — sem depender de nenhum PC ligado.
 
-**URL pública:** `<<PREENCHER: https://<org>.github.io/<repo>/>>`
+**URL pública:** `https://metrics-odr.github.io/dash-larissa-mentoria/`
 
 ---
 
@@ -22,18 +22,19 @@ sem depender de nenhum PC ligado.
 
 ## Critério de Lead Qualificado (MQL)
 
-`<<PREENCHER: critério de qualificação do cliente novo>>`. Lógica em `build.py` →
-`is_qualified`.
+Coluna "Qualificação" == "QLF" **ou** coluna "score" == 10 (aba Leads). Lógica
+em `build.py` → `is_qualified`.
 
 ## Fontes de dados (somente leitura)
 
-Planilha central `<<PREENCHER: nome da planilha>>`
-(`<<PREENCHER: ID da planilha>>`):
+Planilha central `Larissa | Planilha Central`
+(`1P7c_7rutl0fdnqIc2DX5DuGl6H9E7WRU_gzDpOdphkw`):
 
 | Aba | gid | Uso |
 |-----|-----|-----|
-| Leads | `<<PREENCHER: gid>>` | leads reais + coluna de qualificação |
-| Meta Ads | `<<PREENCHER: gid>>` | gasto, impressões, cliques |
+| Leads | `258602723` | leads reais + Qualificação/score → MQL, funil/temperatura |
+| Meta Ads | `0` | gasto, impressões, cliques |
+| Compradores | `179764332` | vendas/faturamento/caixa, cruzadas com Leads por e-mail |
 
 O build lê essas abas via **export CSV público** (`.../export?format=csv&gid=...`).
 **Nada é escrito de volta** nas planilhas.
@@ -64,7 +65,7 @@ aberta — sempre pegando a versão mais nova.
 ```bash
 python build/build.py --out dist/index.html            # busca os CSVs ao vivo
 # ou, com arquivos locais para teste:
-python build/build.py --leads-file leads.csv --meta-file meta.csv --out dist/index.html
+python build/build.py --leads-file leads.csv --meta-file meta.csv --sales-file compradores.csv --out dist/index.html
 ```
 
 ---

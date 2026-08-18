@@ -71,32 +71,33 @@ os Insights.
 
 ## Contexto do funil
 
-<<PREENCHER: nome/sigla do funil do cliente novo (ex. "Funil de <nome da
-oferta> (SIGLA)")>> — <<PREENCHER: nome do cliente, nome do negócio/oferta>>.
-<<PREENCHER: descreva o tipo de funil (venda 1:1 por reunião / evento /
-lançamento / carrinho direto etc.) e o caminho do lead>>: o anúncio no Meta
-Ads leva a <<PREENCHER: página de captura/formulário/LP>> que
-<<PREENCHER: se houver etapa de qualificação, descreva o critério aqui>> e,
-se qualificado, o lead <<PREENCHER: próxima etapa — agenda reunião, compra
-direto, entra em lista de espera etc.>>.
+**Funil de High Ticket** — Mentoria Versalhes (Larissa Topper). Três funis de
+captura cruzados no mesmo dashboard (filtro por dropdown): **APD-BR**
+(Aplicação Direta nacional), **APD-MUNDO** (Aplicação Direta internacional) e
+**DIAG** (Diagnóstico). Venda 1:1 por reunião: o anúncio no Meta Ads leva a um
+formulário de aplicação (Typeform) que pergunta renda/momento profissional/
+disposição a investir; o formulário calcula um `score` e a equipe marca
+"Qualificação" = QLF/DSQ. Lead qualificado agenda uma call com o comercial;
+se fechar, a venda é registrada na aba Compradores (cruzada por e-mail).
 
 ```
-Impressões → Cliques/abertura do formulário → Leads → MQLs (<<PREENCHER: sigla de qualificação>>) → <<PREENCHER: etapas seguintes do funil deste cliente, ex. Agendamentos → Reuniões Realizadas → Vendas → Faturamento>>
+Impressões → Cliques/abertura do formulário → Leads → MQLs (Score 10 ou QLF) → Agendamentos → Vendas → Faturamento
 ```
 
-- **MQL / <<PREENCHER: sigla de qualificação>>** = <<PREENCHER: critério de
-  qualificação do cliente novo>> (ver `build.py` → `is_qualified`).
-- **Agendamento** = o lead qualificado marcou horário de reunião com o comercial.
-- **Reunião Realizada** = a reunião de fato aconteceu (o lead compareceu). O
-  inverso disso é o **No‑Show** (agendou e não compareceu) — a métrica de alerta
-  mais importante entre Agendamento e Venda.
+- **MQL** = coluna "Qualificação" == "QLF" **ou** coluna "score" == 10 (aba
+  Leads) — ver `build.py` → `is_qualified`.
+- **Agendamento** = coluna "Status da resposta" == "scheduled" (aba Leads).
+- **Reunião Realizada** = ainda não tem fonte própria na planilha (aparece
+  como "-"); "Venda" já é o resultado mais profundo disponível hoje.
+- **Venda/Faturamento/Receita (Caixa)** = aba Compradores, cruzada por e-mail
+  (fallback telefone) com o lead mais antigo daquele contato (primeiro
+  toque) — ver `build.py` → `join_sales`. "Faturamento" = valor total do
+  contrato ("faturamentoVenda"); "Receita (Caixa)" = valor efetivamente
+  recebido ("caixaVenda") — cada um com seu próprio ROAS/Ticket Médio.
 
-> **Estado atual dos dados:** enquanto só houver mídia paga × Leads, o funil
-> vai até **MQL**. As etapas seguintes (Agendamentos, Reuniões Realizadas, Vendas,
-> Faturamento) e as métricas derivadas aparecem como “-” até chegar a lista do
-> comercial/vendas. Quando os campos `agendamentos`/`reunioes`/`vendas`/
-> `fat` forem somados por linha em `buildAgg/daily/totals` (`build/app.js`),
-> **toda a UI acende sozinha** (funil, tabelas, Top/Piores).
+> **Campanhas fora dos 3 funis** (aquecimento, vendas, engajamento — ex. C1,
+> C2, CDR, YAY) são descartadas do dashboard inteiro (não entram nem no
+> Acumulado Total). Ver `build.py` → `classify_funil`.
 
 ## Fórmulas fundamentais
 

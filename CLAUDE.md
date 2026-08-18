@@ -6,27 +6,34 @@
 
 ## ✅ CHECKLIST DE NOVO CLIENTE
 
+> **Status: preenchido para Mentoria Versalhes (Larissa Topper) — Funil de High
+> Ticket.** A lista abaixo fica como referência para o próximo cliente que usar
+> este template; os marcadores de preenchimento já foram todos resolvidos neste repo.
+
 Marque cada item ao configurar este template para um cliente novo. Ordem sugerida:
 
 1. **Planilha de dados** (`build/build.py`):
-   - [ ] `SPREADSHEET_ID` — ID da planilha Google Sheets (só leitura, export CSV público).
-   - [ ] `GID_LEADS` / `GID_META` — gids das abas de Leads e de mídia paga.
-   - [ ] `CLIENT_NAME` / `MAIN_PRODUCT` / `MAIN_PRODUCT_PREFIX` — identificação do
+   - [x] `SPREADSHEET_ID` — ID da planilha Google Sheets (só leitura, export CSV público).
+   - [x] `GID_LEADS` / `GID_META` — gids das abas de Leads e de mídia paga.
+   - [x] `CLIENT_NAME` / `MAIN_PRODUCT` / `MAIN_PRODUCT_PREFIX` — identificação do
      cliente/oferta (hoje só usados em textos/relatórios).
-   - [ ] `GID_SALES` — só quando houver aba de vendas/compradores (ver "Lacunas de
-     dados" abaixo); enquanto não houver, deixe o marcador — não é lido em nenhum lugar.
-   - [ ] Conferir/ajustar os **aliases de coluna** em `header_index()` (nomes de
+   - [x] `GID_SALES` — aba de vendas/compradores (Compradores, gid 179764332),
+     cruzada por e-mail em `join_sales()`.
+   - [x] Conferir/ajustar os **aliases de coluna** em `header_index()` (nomes de
      cabeçalho podem variar entre clientes) e o **fallback posicional**.
-   - [ ] `is_qualified()` / `MQL_FATURAMENTO_MIN` — critério de MQL do cliente
-     (ex.: faturamento ≥ X; pode ser outro critério, não precisa ser faixa de faturamento).
-   - [ ] `TAX_FACTOR` — imposto/taxa da conta de mídia (1.0 se não houver).
+   - [x] `is_qualified()` — critério de MQL do cliente: coluna "Qualificação" ==
+     "QLF" ou coluna "score" == 10 (não é faixa de faturamento neste cliente).
+   - [x] `TAX_FACTOR` — 1.0 (sem imposto adicional informado para esta conta).
+   - [x] `classify_funil()` / `classify_temp()` — classificação em 3 funis
+     (APD-BR/APD-MUNDO/DIAG) + temperatura (Quente/Frio) a partir do nome da
+     campanha (específico deste cliente, que tem múltiplos funis num único
+     dashboard — não fazia parte do template original).
 2. **Regra de qualificação em `app.js`** (o critério em `build.py` **não** propaga
-   sozinho para textos fixos da UI): revise os rótulos `'MQLs (<<PREENCHER...>>)'`
-   (2 ocorrências, função `renderGeralCore`) e a lista `order` de faixas de
-   faturamento/qualificação (mesma função) — ajuste ao critério real do cliente novo.
-3. **Branding**: `build/template.html` — troque o nome do cliente no `<title>`
-   e no logo da sidebar (2 ocorrências, `<<PREENCHER: nome do cliente>>` /
-   `<<PREENCHER: nome do negócio/produto>>`).
+   sozinho para textos fixos da UI): rótulos `'MQLs (Score 10 ou QLF)'`
+   (função `renderGeralCore`/`renderMeta`) e a lista `order` de faixas de
+   renda (mesma função, só exibição — não decide o MQL).
+3. **Branding**: `build/template.html` — `<title>Mentoria Versalhes</title>` e
+   logo da sidebar (`Mentoria Versalhes` / `Larissa Topper`).
 4. **Cores** (opcional): `build/identidade-visual.css` — a paleta atual é neutra/
    genérica; troque só se o cliente tiver identidade visual própria.
 5. **Nome do projeto/URL** em `README.md`, `CLAUDE.md` (esta seção "O que é",
@@ -43,8 +50,8 @@ Marque cada item ao configurar este template para um cliente novo. Ordem sugerid
    documento — revogue e gere outro.
 8. **Aba Relatório / Insights de Tráfego** (`build/GUIA-RELATORIOS.md` +
    `build/GUIA-INTERPRETACAO-METRICAS.md`):
-   - [ ] Ajustar o contexto do funil (produto/oferta/etapas) no topo do
-     `GUIA-RELATORIOS.md` (marcadores `<<PREENCHER>>`).
+   - [x] Ajustar o contexto do funil (produto/oferta/etapas) no topo do
+     `GUIA-RELATORIOS.md`.
    - [ ] `build/relatorios.json` e `build/relatorios_dados.json` começam vazios
      (`"periodos": {}`) — preenchidos automaticamente pelo "Briefing automático
      do gestor" (ver seção abaixo) assim que houver dados reais, ou manualmente
@@ -76,41 +83,56 @@ puro + Chart.js via CDN) publicado no **GitHub Pages**, que cruza a lista de
 **Leads** com o gerenciador de mídia paga e se atualiza sozinho a cada ~30 min
 (build 100% na nuvem via GitHub Actions, disparado externamente pelo cron-job.org).
 
-- **URL pública:** `<<PREENCHER: https://<org>.github.io/<repo>/>>`
+- **URL pública:** `https://metrics-odr.github.io/dash-larissa-mentoria/`
 - **Somente leitura** das planilhas. Nunca escrever de volta.
 
 ## Fontes de dados (Google Sheets)
 
-Spreadsheet ID: `<<PREENCHER: ID da planilha>>` (público — leitura via export CSV).
+Spreadsheet ID: `1P7c_7rutl0fdnqIc2DX5DuGl6H9E7WRU_gzDpOdphkw` (planilha central
+"Larissa | Planilha Central" — público, leitura via export CSV).
 
 | Aba | gid | Colunas usadas |
 |-----|-----|----------------|
-| **Leads** (formulário/typeform) | `<<PREENCHER: gid>>` | `<<PREENCHER: nomes reais das colunas da planilha do cliente e o que cada uma mapeia — created/ad_name/adset_name/campaign/platform/profession/faturamento/name/email/phone>>` |
-| **Meta Ads** | `<<PREENCHER: gid>>` | `Day` · `Campaign Name` · `Ad Set Name` · `Ad Name` · `Amount Spent` · `Impressions` · `Link Clicks` · `Leads` · `Creative Instagram Permalink`(link do criativo, opcional) |
+| **Leads** (Typeform "Versalhes") | `258602723` | `Formulário` (fallback de funil p/ leads orgânicos) · `Enviado às` (data) · `Status da resposta` (`scheduled`=agendamento) · `Nome completo` · `E-mail` · `WhatsApp` · `utm_source/medium/campaign/content` · `score` · `Qual é a sua Profissão/área de atuação na saúde?` · `Qual é a sua renda mensal familiar?` (faixa, só exibição) · `Qualificação` (QLF/DSQ) |
+| **Meta Ads** | `0` | `Day` · `Campaign Name` · `Ad Set Name` · `Ad Name` · `Amount Spent` · `Impressions` · `Link Clicks` · `Leads` · `Creative Instagram Permalink` (link do criativo, opcional) |
+| **Compradores** | `179764332` | `data_envio` · `email` · `telefone` · `caixaVenda` (Receita) · `faturamentoVenda` (Faturamento) — cruzada com Leads por e-mail (fallback telefone) em `build.py` → `join_sales` |
 
 URL de export CSV: `https://docs.google.com/spreadsheets/d/<ID>/export?format=csv&gid=<GID>`
 
 ### Regra de Lead Qualificado (MQL)
-`<<PREENCHER: critério de qualificação do cliente novo — ex. faturamento médio
-mensal ≥ R$ X, coluna "..." da aba Leads, faixas no formato "Entre R$X e R$Y" /
-"Menos de R$X" / "Mais de R$X">>`. Lógica em `build.py` → `is_qualified`
-(limiar `MQL_FATURAMENTO_MIN`); rótulos/ordem de faixas espelhados em `app.js`
-(`order` em `renderGeralCore`).
+Coluna `Qualificação` == `QLF` **ou** coluna `score` == `10` (aba Leads).
+Lógica em `build.py` → `is_qualified`. Sem faixa de faturamento neste
+cliente — o rótulo "faixa" no dashboard mostra `Qual é a sua renda mensal
+familiar?` só para fins de exibição/distribuição, não decide o MQL; ordem das
+faixas espelhada em `app.js` (`order` em `renderGeralCore`).
+
+### Funis (Funil de High Ticket)
+Três funis cruzados no mesmo dashboard, com filtro global por dropdown
+(Funil / Temperatura, na topbar): **APD-BR** (Aplicação Direta nacional),
+**APD-MUNDO** (Aplicação Direta internacional) e **DIAG** (Diagnóstico).
+Classificados a partir do nome da campanha (`utm_campaign` / `Campaign Name`):
+sigla `APD`/`DIAG` no nome, ou tag legada `[VERSALHES-APLICACAO]` (sempre
+Aplicação Direta); `MUNDO`/`Portugal` no nome = internacional, senão BR.
+Temperatura: `QUENTE`/`FRIO` no nome (novo e legado). Leads orgânicos sem
+campanha classificável caem no nome do `Formulário`. **Campanhas fora dos 3
+funis** (aquecimento, vendas, engajamento — C1, C2, CDR, YAY etc.) são
+**descartadas do dashboard inteiro**, inclusive do Acumulado Total. Lógica em
+`build.py` → `classify_funil`/`classify_temp`.
 
 ### Imposto da mídia paga
-`TAX_FACTOR` em `build.py` — `<<PREENCHER: imposto/taxa real da conta de mídia
-do cliente, ou deixe 1.0 se não houver>>`. O toggle "Imposto Meta" fica
-**ativo por padrão** (`STATE.tax=true` em `app.js`) e aplica o fator em todo
-o gasto/derivados (CPL, CPMQL, CAC etc.); desativar o toggle volta ao gasto
-sem imposto.
+`TAX_FACTOR = 1.0` em `build.py` — sem imposto adicional informado para esta
+conta de mídia. O toggle "Imposto Meta" fica **ativo por padrão**
+(`STATE.tax=true` em `app.js`) e aplica o fator em todo o gasto/derivados
+(CPL, CPMQL, CAC etc.); desativar o toggle volta ao gasto sem imposto.
 
 ### Convenções de campanha (do cliente)
-`<<PREENCHER: sigla/nome do funil e padrão de nomenclatura das campanhas do
-cliente novo, ex. "SIGLA | <etapa> | <público> | <objetivo> | <estratégia> |
-<data> | <teste>">>`. `utm_content` = nome do anúncio (deve bater com `Ad Name`
-do Meta Ads). `utm_campaign` = `Campaign Name` do Meta Ads. `utm_medium` é
-usado como conjunto (adset) — confira se a nomenclatura do cliente bate com
-`Ad Set Name` do Meta; se não bater 100%, o cruzamento por Conjunto pode ficar
+Padrão novo: `SIGLA | <etapa> | <temperatura> | <objetivo> | <estratégia> |
+<data> | <teste>` (ex. `APD | E2-CAP | P1-QUENTE | CONV | ABO | 2026-05-14 |
+MUNDO | Teste de LPs`). Campanhas legadas usam a tag `[VERSALHES-APLICACAO]`.
+`utm_content` = nome do anúncio (deve bater com `Ad Name` do Meta Ads).
+`utm_campaign` = `Campaign Name` do Meta Ads. `utm_medium` é usado como
+conjunto (adset) — confira se a nomenclatura do cliente bate com `Ad Set
+Name` do Meta; se não bater 100%, o cruzamento por Conjunto pode ficar
 levemente impreciso até o cliente padronizar.
 
 ## Arquitetura / arquivos
@@ -126,7 +148,7 @@ build/relatorios_dados.json      # números brutos por período (insumo p/ a Rou
 build/relatorio_lib.py           # datas/agregação compartilhadas (gerar_relatorios.py + coletar_dados_relatorio.py)
 build/coletar_dados_relatorio.py # gera relatorios_dados.json (só números, sem texto) — roda no briefing.yml, 1x/dia
 build/gerar_relatorios.py        # gera relatorios.json determinístico (sem IA) — fallback MANUAL, não roda mais sozinho
-build/GUIA-RELATORIOS.md            # formato/estrutura dos Insights da aba Relatório (os 7 blocos) — contexto do funil com marcadores <<PREENCHER>>
+build/GUIA-RELATORIOS.md            # formato/estrutura dos Insights da aba Relatório (os 7 blocos) — contexto do funil no topo do arquivo
 build/GUIA-INTERPRETACAO-METRICAS.md # regras de diagnóstico por métrica (High Ticket) — leitura obrigatória p/ redigir
 .github/workflows/deploy.yml    # roda build.py e publica no Pages (workflow_dispatch + schedule + push)
 .github/workflows/briefing.yml  # roda coletar_dados_relatorio.py e commita relatorios_dados.json na main (cron 1x/dia, 23h50 BRT)
@@ -286,4 +308,4 @@ MQLs (verde)** — cores em `--heat-gasto/leads/mqls`. As demais colunas ficam s
    gerar um novo** (fine‑grained, só Actions: read/write neste repo).
 
 ## Branch / git
-- `<<PREENCHER: branch de trabalho, se houver>>`; manter sincronizada com `main`.
+- `claude/mednexus-paid-traffic-dashboard-kxibmc`; manter sincronizada com `main`.

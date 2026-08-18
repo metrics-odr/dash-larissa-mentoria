@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Gera a dashboard estatica (index.html) a partir de duas abas da planilha central:
+Gera a dashboard estatica (index.html) a partir de tres abas da planilha central:
 
-  - "Leads" (gid <<PREENCHER: gid da aba de Leads>>): leads reais + coluna de faturamento => qualificacao
-  - "Meta Ads" (gid <<PREENCHER: gid da aba de mídia paga>>): investimento/impressoes/cliques do gerenciador
+  - "Leads" (gid 258602723): leads reais + Qualificacao/score => MQL
+  - "Meta Ads" (gid 0): investimento/impressoes/cliques do gerenciador
+  - "Compradores" (gid 179764332): vendas/faturamento/caixa, cruzadas com Leads por e-mail
 
-Criterio de Lead Qualificado (MQL): <<PREENCHER: critério de qualificação do cliente
-(ex.: faturamento medio mensal >= R$ X, coluna "..." da planilha)>>.
+Criterio de Lead Qualificado (MQL): coluna "Qualificação" == "QLF" OU coluna
+"score" == 10 (aba Leads).
+
+Cada lead/linha de midia e classificado em um dos 3 funis (Funil de High Ticket):
+DIAG, APD-BR, APD-MUNDO, a partir do nome da campanha (utm_campaign / Campaign
+Name) e, para leads organicos sem campanha, do nome do formulario. Campanhas que
+nao pertencem a nenhum dos 3 funis (aquecimento, vendas, etc.) sao descartadas.
+Ver classify_funil()/classify_temp() abaixo.
 
 Este script apenas LE as planilhas (export CSV publico) e emite os REGISTROS BRUTOS
 (leads[] e meta[]) dentro do HTML. Todos os filtros, agregacoes, KPIs, tabelas e
 graficos sao calculados no navegador (client-side), permitindo filtro por data e
 filtro cruzado bidirecional sem recarregar. Nunca escreve nada de volta.
 
-Teste local: --leads-file / --meta-file apontando para CSVs baixados.
+Teste local: --leads-file / --meta-file / --sales-file apontando para CSVs baixados.
 """
 from __future__ import annotations
 
@@ -29,21 +36,20 @@ import unicodedata
 import urllib.request
 from datetime import datetime, timezone, timedelta
 
-SPREADSHEET_ID = "<<PREENCHER: ID da planilha Google Sheets (só leitura, export CSV público)>>"
-GID_LEADS = "<<PREENCHER: gid da aba de Leads>>"
-GID_META = "<<PREENCHER: gid da aba de mídia paga>>"
+SPREADSHEET_ID = "1P7c_7rutl0fdnqIc2DX5DuGl6H9E7WRU_gzDpOdphkw"
+GID_LEADS = "258602723"
+GID_META = "0"
 EXPORT_URL = "https://docs.google.com/spreadsheets/d/{sid}/export?format=csv&gid={gid}"
 
 # Identificação do cliente/conta (usada só em textos/relatórios — não afeta o cruzamento de dados).
-CLIENT_NAME = "<<PREENCHER: nome do cliente/negócio>>"
-MAIN_PRODUCT = "<<PREENCHER: nome do produto/oferta principal>>"
-MAIN_PRODUCT_PREFIX = "<<PREENCHER: sigla/prefixo do funil ou produto usado nos nomes de campanha>>"
-# Reservado para quando houver uma aba de vendas/compradores (ver "Lacunas de dados"
-# no CLAUDE.md) — ainda não usado em process()/build.py; ligar quando a fonte existir.
-GID_SALES = "<<PREENCHER: gid da aba de vendas/compradores, quando existir>>"
+CLIENT_NAME = "Versalhes"
+MAIN_PRODUCT = "Mentoria Versalhes"
+MAIN_PRODUCT_PREFIX = "Funil de High Ticket"
+# Aba "Compradores": vendas/faturamento/caixa, cruzadas com Leads por e-mail (ver join_sales()).
+GID_SALES = "179764332"
 
 BRT = timezone(timedelta(hours=-3))   # horario de Brasilia (exibicao)
-TAX_FACTOR = 1.0                      # <<PREENCHER: imposto/taxa da conta de mídia (1.0 se não houver)>>
+TAX_FACTOR = 1.0                      # sem imposto adicional informado para esta conta de mídia
 
 # --------------------------------------------------------------------------- #
 # Regras da aba Relatório (Top/Piores anúncios)
@@ -135,40 +141,68 @@ def is_test_lead(rowtext: str) -> bool:
     return "<test lead" in rowtext.lower()
 
 
-_MONEY_RE = re.compile(r"\d[\d.]*(?:,\d+)?")
-MQL_FATURAMENTO_MIN = 0.0  # <<PREENCHER: limiar de faturamento (R$) que define o MQL do cliente novo>>
+def is_qualified(qlf_flag: str | None, score) -> bool:
+    """MQL do Funil de High Ticket: coluna "Qualificação" == "QLF" OU coluna
+    "score" == 10 (aba Leads). Reajustável — ver checklist do CLAUDE.md."""
+    if norm(qlf_flag) == "qlf":
+        return True
+    try:
+        if float(str(score).strip().replace(",", ".")) == 10:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return False
 
 
-def _money_values(s: str) -> list[float]:
-    out = []
-    for tok in _MONEY_RE.findall(s):
-        t = tok.replace(".", "").replace(",", ".")
-        try:
-            out.append(float(t))
-        except ValueError:
-            pass
-    return out
+# --------------------------------------------------------------------------- #
+# Classificação de funil / temperatura (a partir do nome da campanha)
+# --------------------------------------------------------------------------- #
+def classify_funil_campaign(campaign: str | None) -> str | None:
+    """DIAG / APD-BR / APD-MUNDO a partir do nome da campanha paga (utm_campaign /
+    Campaign Name). Campanhas novas usam a sigla "APD" ou "DIAG"; campanhas
+    legadas usam a tag "[VERSALHES-APLICACAO]" (sempre um funil de Aplicação
+    Direta). "MUNDO"/"Portugal" no nome = internacional; senão, BR. Campanhas
+    fora dos 3 funis (aquecimento, vendas, etc.) retornam None (descartadas)."""
+    s = (campaign or "").upper()
+    if "DIAG" in s:
+        return "DIAG"
+    if "APD" in s or "VERSALHES-APLICACAO" in s:
+        return "APD-MUNDO" if ("MUNDO" in s or "PORTUGAL" in s) else "APD-BR"
+    return None
 
 
-def is_qualified(bucket: str | None) -> bool:
-    """<<PREENCHER: critério de MQL do cliente novo>> — assume por padrão faixas de
-    faturamento no formato "Entre R$X e R$Y" / "Menos de R$X" / "Mais de R$X" (mesma
-    coluna de qualificação da planilha). Ajuste esta função se o critério do cliente
-    novo não for baseado em faixa de faturamento (ex.: outra pergunta do formulário,
-    outro tipo de corte)."""
-    s = norm(bucket)
-    if not s or "test lead" in s:
-        return False
-    nums = _money_values(s)
-    if not nums:
-        return False
-    if "menos" in s or "ate " in s or "abaixo" in s:
-        return False
-    if "entre" in s:
-        return min(nums) >= MQL_FATURAMENTO_MIN
-    if any(k in s for k in ("mais", "acima", "superior", "maior")):
-        return max(nums) >= MQL_FATURAMENTO_MIN
-    return max(nums) >= MQL_FATURAMENTO_MIN
+def classify_funil_formulario(formulario: str | None) -> str | None:
+    """Fallback para leads orgânicos (sem campanha paga classificável): usa o
+    nome do formulário/typeform de origem."""
+    f = strip_accents((formulario or "").upper())
+    if "DIAGNOSTICO" in f:
+        return "DIAG"
+    if "APLICACAO DIRETA" in f:
+        return "APD-MUNDO" if "INTERNACIONAL" in f else "APD-BR"
+    return None
+
+
+def classify_funil(campaign: str | None, formulario: str | None = None, organic: bool = False) -> str | None:
+    """Junta as duas classificações acima. Para leads PAGOS (organic=False), só
+    o nome da campanha decide — uma campanha paga fora dos 3 funis (aquecimento,
+    vendas, etc.) é descartada, mesmo que o formulário de origem diga "Aplicação
+    Direta" (ex.: retargeting/nutrição). Para leads ORGÂNICOS, cai no formulário
+    quando a campanha (utm_campaign) não permite classificar (ex.: "bio")."""
+    funil = classify_funil_campaign(campaign)
+    if funil is not None:
+        return funil
+    if organic:
+        return classify_funil_formulario(formulario)
+    return None
+
+
+def classify_temp(campaign: str | None) -> str:
+    s = (campaign or "").upper()
+    if "QUENTE" in s:
+        return "Quente"
+    if "FRIO" in s:
+        return "Frio"
+    return "—"
 
 
 def pretty_bucket(bucket: str) -> str:
@@ -231,26 +265,76 @@ def cell(row, i):
 # --------------------------------------------------------------------------- #
 # Processamento -> registros brutos
 # --------------------------------------------------------------------------- #
-def process(leads_rows, meta_rows):
+def phone_digits(p: str) -> str:
+    return re.sub(r"\D", "", p or "")[-8:]  # últimos 8 dígitos (fallback de junção)
+
+
+# --------------------------------------------------------------------------- #
+# Junção com a aba "Compradores" (vendas/faturamento/caixa)
+# --------------------------------------------------------------------------- #
+def join_sales(leads: list, sales_rows: list) -> None:
+    """Cruza cada linha da aba Compradores com o lead correspondente (por
+    e-mail; se não achar, tenta os últimos 8 dígitos do telefone) e soma
+    vendas/faturamento("faturamentoVenda")/caixa("caixaVenda") na linha do
+    lead. Quando o e-mail/telefone casa com mais de um lead (a pessoa se
+    aplicou mais de uma vez), atribui a venda ao lead mais ANTIGO (primeiro
+    toque) daquele contato. Compradores sem lead correspondente nos 3 funis
+    não entram em nenhuma métrica (não há campanha/funil pra atribuir)."""
+    if not sales_rows:
+        return
+    sheader = sales_rows[0]
+    sidx = header_index(
+        sheader,
+        {"date": ["data_envio", "data"], "email": ["email"], "phone": ["telefone"],
+         "caixa": ["caixavenda"], "fat": ["faturamentovenda"]},
+        {"date": 0, "email": 4, "phone": 9, "caixa": 10, "fat": 11},
+    )
+    def older(idx_a, idx_b):  # -> índice do lead com created mais antigo (None-safe)
+        da, db = leads[idx_a]["d"] or "9999", leads[idx_b]["d"] or "9999"
+        return idx_a if da <= db else idx_b
+
+    by_email: dict[str, int] = {}
+    by_phone: dict[str, int] = {}
+    for i, l in enumerate(leads):
+        if l["_email"]:
+            by_email[l["_email"]] = i if l["_email"] not in by_email else older(by_email[l["_email"]], i)
+        if l["_phone"]:
+            by_phone[l["_phone"]] = i if l["_phone"] not in by_phone else older(by_phone[l["_phone"]], i)
+
+    for row in sales_rows[1:]:
+        if not any((c or "").strip() for c in row):
+            continue
+        email = norm(cell(row, sidx["email"]))
+        phone = phone_digits(cell(row, sidx["phone"]))
+        idx = by_email.get(email) if email else None
+        if idx is None and phone:
+            idx = by_phone.get(phone)
+        if idx is None:
+            continue
+        leads[idx]["vendas"] += 1
+        leads[idx]["fat"] += to_float(cell(row, sidx["fat"]))
+        leads[idx]["caixa"] += to_float(cell(row, sidx["caixa"]))
+
+
+def process(leads_rows, meta_rows, sales_rows=None):
     lheader = leads_rows[0] if leads_rows else []
     lidx = header_index(
         lheader,
-        # Aba "Leads" (formulário/typeform): sem coluna de plataforma/orgânico
-        # dedicada — usamos utm_source como platform e is_organic fica sem
-        # alias (todos os leads atuais são via Meta Ads pago).
-        {"created": ["data ajustada", "created_time", "data", "created"],
+        # Aba "Leads" (formulário Typeform "Versalhes"): sem coluna de
+        # plataforma/orgânico dedicada — usamos utm_source como platform.
+        {"created": ["enviado as", "enviado", "data ajustada", "created_time", "data", "created"],
          "ad_name": ["utm_content", "ad_name"],
          "adset_name": ["utm_medium", "adset_name"], "campaign": ["utm_campaign", "campaign_name"],
+         "formulario": ["formulario"],
          "is_organic": ["is_organic"],
-         "platform": ["utm_source", "platform"], "profession": ["profissao e atividade", "qual_sua_profissao", "profiss"],
-         "faturamento": ["media de faturamento mensal", "qual_seu_faturamento", "faturamento"],
+         "platform": ["utm_source", "platform"], "profession": ["profissao"],
+         "faturamento": ["renda mensal familiar"],
+         "status": ["status da resposta"], "qlf": ["qualificacao"], "score": ["score"],
          "name": ["nome completo", "full_name", "nome"],
          "email": ["e-mail", "email"], "phone": ["whatsapp", "phone_number", "phone", "telefone"]},
-        # <<PREENCHER: fallback posicional (índice de coluna) — confira contra o
-        # cabeçalho real da planilha do cliente novo; os aliases acima cobrem a
-        # maioria dos casos, este fallback só entra se nenhum alias bater>>
-        {"created": 31, "ad_name": 14, "adset_name": 12, "campaign": 13, "is_organic": None, "platform": 11,
-         "profession": 26, "faturamento": 29, "name": 7, "email": 8, "phone": 9},
+        {"created": 4, "ad_name": 14, "adset_name": 12, "campaign": 13, "is_organic": None, "platform": 11,
+         "formulario": 0, "profession": None, "faturamento": 23, "status": 6,
+         "qlf": None, "score": 16, "name": 7, "email": 8, "phone": 9},
     )
 
     leads = []
@@ -259,9 +343,13 @@ def process(leads_rows, meta_rows):
             continue
         if is_test_lead(" ".join(str(c) for c in row)):
             continue
-        organic = norm(cell(row, lidx["is_organic"])) in ("true", "1", "sim", "verdadeiro")
         platform = norm(cell(row, lidx["platform"]))
         campaign = cell(row, lidx["campaign"])
+        organic = norm(cell(row, lidx["is_organic"])) in ("true", "1", "sim", "verdadeiro") or platform in ("organico", "organic", "")
+        formulario = cell(row, lidx["formulario"])
+        funil = classify_funil(campaign, formulario, organic)
+        if funil is None:
+            continue  # fora dos 3 funis do Funil de High Ticket -> descarta
         if organic:
             src = "org"
         elif norm(campaign).startswith("goog") or platform in ("google", "youtube"):
@@ -271,6 +359,8 @@ def process(leads_rows, meta_rows):
         else:
             src = "outros"
         fat = cell(row, lidx["faturamento"])
+        raw_email = norm(cell(row, lidx["email"]))
+        raw_phone = phone_digits(cell(row, lidx["phone"]))
         leads.append({
             "d": parse_date(cell(row, lidx["created"])),
             "src": src,
@@ -280,12 +370,21 @@ def process(leads_rows, meta_rows):
             "ad": cell(row, lidx["ad_name"]) or "(sem anúncio)",
             "prof": (cell(row, lidx["profession"]) or "Sem resposta").replace("_", " ").capitalize(),
             "bucket": pretty_bucket(fat),
-            "q": 1 if is_qualified(fat) else 0,
+            "q": 1 if is_qualified(cell(row, lidx["qlf"]), cell(row, lidx["score"])) else 0,
             "utm": 1 if valid_utm(campaign) else 0,
             "nm": first_last_initial(cell(row, lidx["name"])),
             "em": mask_email(cell(row, lidx["email"])),
             "ph": mask_phone(cell(row, lidx["phone"])),
+            "funil": funil,
+            "temp": classify_temp(campaign),
+            "agd": 1 if norm(cell(row, lidx["status"])) == "scheduled" else 0,
+            "vendas": 0, "fat": 0.0, "caixa": 0.0,
+            "_email": raw_email, "_phone": raw_phone,  # só para join_sales(); removidos antes do JSON final
         })
+
+    join_sales(leads, sales_rows or [])
+    for l in leads:
+        del l["_email"], l["_phone"]
 
     mheader = meta_rows[0] if meta_rows else []
     midx = header_index(
@@ -310,13 +409,17 @@ def process(leads_rows, meta_rows):
     for row in meta_rows[1:]:
         if not any((c or "").strip() for c in row):
             continue
+        campaign = cell(row, midx["campaign"])
+        funil = classify_funil(campaign)
+        if funil is None:
+            continue  # fora dos 3 funis do Funil de High Ticket -> descarta
         ad = cell(row, midx["ad"]) or "(sem anúncio)"
         link = cell(row, midx["link"])
         if link and ad not in ad_links:
             ad_links[ad] = link
         meta.append({
             "d": parse_date(cell(row, midx["day"])),
-            "camp": cell(row, midx["campaign"]) or "(sem campanha)",
+            "camp": campaign or "(sem campanha)",
             "adset": cell(row, midx["adset"]) or "(sem conjunto)",
             "ad": ad,
             "sp": round(to_float(cell(row, midx["spent"])), 4),
@@ -324,6 +427,8 @@ def process(leads_rows, meta_rows):
             "cl": to_float(cell(row, midx["clicks"])),
             "pv": to_float(cell(row, midx["pv"])),
             "ml": to_float(cell(row, midx["leads"])),
+            "funil": funil,
+            "temp": classify_temp(campaign),
         })
 
     dates = sorted({d for d in ([l["d"] for l in leads if l["d"]] + [m["d"] for m in meta if m["d"]])})
@@ -345,6 +450,8 @@ def process(leads_rows, meta_rows):
             "meta_cac": META_CAC,
             "volume_min_amostral": VOLUME_MIN_AMOSTRAL,
             "n_dias_corte": N_DIAS_CORTE,
+            # opções do dropdown de funil (Visão Geral Total / filtro global)
+            "funis": ["APD-BR", "APD-MUNDO", "DIAG"],
         },
         "leads": leads,
         "meta": meta,
@@ -406,13 +513,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--leads-file")
     ap.add_argument("--meta-file")
+    ap.add_argument("--sales-file")
     ap.add_argument("--template", default="build/template.html")
     ap.add_argument("--out", default="dist/index.html")
     args = ap.parse_args()
 
     leads_rows = load_rows(EXPORT_URL.format(sid=SPREADSHEET_ID, gid=GID_LEADS), args.leads_file)
     meta_rows = load_rows(EXPORT_URL.format(sid=SPREADSHEET_ID, gid=GID_META), args.meta_file)
-    data = process(leads_rows, meta_rows)
+    sales_rows = load_rows(EXPORT_URL.format(sid=SPREADSHEET_ID, gid=GID_SALES), args.sales_file)
+    data = process(leads_rows, meta_rows, sales_rows)
 
     # Insights de Tráfego (texto pré-escrito) — lidos do arquivo versionado ao
     # lado do template. Sem chamada de API no build.

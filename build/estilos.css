@@ -78,6 +78,10 @@
   .btn.loading .spin{animation:spin .8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
 
+  /* dropdowns de filtro (Funil / Temperatura) na topbar — mesmo visual do .btn */
+  .select-filter{border:1px solid var(--border); background:var(--surface); color:var(--ink); border-radius:9px; padding:8px 10px; font-size:12.5px; cursor:pointer; max-width:180px}
+  .select-filter:hover{border-color:var(--accent-blue)}
+
   /* Toggle ON/OFF */
   .tax-toggle{display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none}
   .toggle-track{width:38px; height:22px; border-radius:999px; background:#cfd2dc; position:relative; transition:.15s}

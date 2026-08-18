@@ -6,32 +6,36 @@
 
 ## ✅ CHECKLIST DE NOVO CLIENTE (resumo — detalhes em CLAUDE.md)
 
-1. `build/build.py`: `SPREADSHEET_ID`, `GID_LEADS`, `GID_META`, `CLIENT_NAME`,
-   `MAIN_PRODUCT`, `MAIN_PRODUCT_PREFIX`, aliases de coluna em `header_index()`,
-   `is_qualified()`/`MQL_FATURAMENTO_MIN` (critério de MQL), `TAX_FACTOR`.
-   `GID_SALES` só quando houver aba de vendas (ainda não usado em nenhum lugar).
-2. `build/app.js`: revisar os rótulos `'MQLs (<<PREENCHER...>>)'` (2 ocorrências)
-   e a lista `order` de faixas de faturamento/qualificação — o critério de
-   `build.py` não propaga sozinho para esses textos fixos da UI.
-3. `build/template.html`: substituir o nome do cliente no `<title>` e no logo
-   (2 marcadores `<<PREENCHER>>`).
+> Preenchido para Mentoria Versalhes (Larissa Topper) — Funil de High Ticket
+> (3 funis: APD-BR / APD-MUNDO / DIAG). Fica como referência para o próximo cliente.
+
+1. `build/build.py`: `SPREADSHEET_ID`, `GID_LEADS`, `GID_META`, `GID_SALES`,
+   `CLIENT_NAME`, `MAIN_PRODUCT`, `MAIN_PRODUCT_PREFIX`, aliases de coluna em
+   `header_index()`, `is_qualified()` (critério de MQL: Qualificação==QLF ou
+   score==10), `TAX_FACTOR`, `classify_funil()`/`classify_temp()` (3 funis +
+   temperatura a partir do nome da campanha — específico deste cliente).
+2. `build/app.js`: rótulos `'MQLs (Score 10 ou QLF)'` e a lista `order` de
+   faixas de renda — o critério de `build.py` não propaga sozinho para esses
+   textos fixos da UI.
+3. `build/template.html`: `<title>Mentoria Versalhes</title>` e logo
+   (`Mentoria Versalhes` / `Larissa Topper`).
 4. `README.md` / `CLAUDE.md` / `SETUP-CRON.md`: owner/repo do GitHub, URL do
    GitHub Pages, nome do cliente.
 5. GitHub Pages + Actions: confirmar que `build/` + `.github/workflows/deploy.yml`
    estão na `main` (ativa `workflow_dispatch`); rodar o workflow uma vez.
 6. cron-job.org: seguir `SETUP-CRON.md` — token fine-grained novo (Actions:
    read/write, só neste repo), nunca reaproveitar um token exposto em chat.
-7. Aba Relatório / Insights de Tráfego (`build/GUIA-RELATORIOS.md`): ajustar o
-   contexto do funil (marcadores `<<PREENCHER>>`); `build/relatorios.json` e
+7. Aba Relatório / Insights de Tráfego (`build/GUIA-RELATORIOS.md`): contexto
+   do funil já preenchido no topo do arquivo; `build/relatorios.json` e
    `build/relatorios_dados.json` começam vazios — preencher manual
    (`gerar_relatorios.py`) ou recriar a Routine do Claude (`create_trigger`)
    apontando para este repo (não vem pronta neste template).
 8. Testar local com CSVs de amostra antes de publicar (3 páginas, tema
    claro/escuro, multi-seleção).
-9. **Automação de vendas / Worker de IA — ainda não implementados.** Este
-   template só cobre mídia paga × Leads (até MQL) e a Routine agendada do
-   Claude para os Insights; não há Cloudflare Worker nem chamada paga à API
-   Anthropic no pipeline. Se o cliente precisar disso, é desenvolvimento novo.
+9. **Automação de vendas via aba Compradores implementada** (join por e-mail,
+   ver `join_sales()` em `build.py`) — não há Cloudflare Worker nem chamada
+   paga à API Anthropic no pipeline (a Routine do Claude para os Insights não
+   usa a API paga). Qualquer outra automação além disso é desenvolvimento novo.
 
 ## Engine (não muda entre clientes)
 `build/template.html`, `build/app.js`, `build/estilos.css`,
