@@ -21,9 +21,11 @@
   --bar-q:#1BAF7A; --bar-noq:#B3B1A8;
   /* heatmap por coluna (uma cor fixa por métrica; a opacidade varia no JS) */
   --heat-gasto:#E34948; --heat-leads:#3B5BDB; --heat-mqls:#1BAF7A;
-  /* destaque de etapas do funil (Mar01): MQL azulado · Gasto avermelhado */
+  --heat-cpl:#E67E22; --heat-cpmql:#E8A400; --heat-cpag:#9B59B6; --heat-vendas:#3B5BDB; --heat-rec:#0CA30C;
+  /* destaque de etapas do funil: MQL/Vendas azulado · Gasto avermelhado · Faturamento/Receita verde */
   --step-mql-bg:#EAF0FF; --step-mql-bd:#3B5BDB;
   --step-gasto-bg:#FDECEC; --step-gasto-bd:#E34948;
+  --step-fat-bg:#E9F7EE; --step-fat-bd:#0CA30C;
 }
 
 /* ------------------------------ TEMA ESCURO (toggle) ----------------------- */
@@ -54,9 +56,11 @@
   --chart-cpl:#F2F3F5; --chart-cpmql:#FFB020;
   /* barras auxiliares */
   --bar-q:#16D66B; --bar-noq:#5A6070;
-  /* heatmap por coluna: Gasto vermelho · Leads azul · MQLs verde */
+  /* heatmap por coluna: Gasto vermelho · Faturamento/Receita verde · demais variadas */
   --heat-gasto:#EF4444; --heat-leads:#3B82F6; --heat-mqls:#22C55E;
-  /* destaque de etapas do funil (Mar01): MQL azulado · Gasto avermelhado */
+  --heat-cpl:#FF8A1F; --heat-cpmql:#FFB020; --heat-cpag:#9D5CFF; --heat-vendas:#3B82F6; --heat-rec:#22C55E;
+  /* destaque de etapas do funil: MQL/Vendas azulado · Gasto avermelhado · Faturamento/Receita verde */
   --step-mql-bg:#16233F; --step-mql-bd:#5B7BF0;
   --step-gasto-bg:#3A1D20; --step-gasto-bd:#EF4444;
+  --step-fat-bg:#122E1E; --step-fat-bd:#22C55E;
 }

@@ -78,9 +78,17 @@
   .btn.loading .spin{animation:spin .8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
 
-  /* dropdowns de filtro (Funil / Temperatura) na topbar — mesmo visual do .btn */
-  .select-filter{border:1px solid var(--border); background:var(--surface); color:var(--ink); border-radius:9px; padding:8px 10px; font-size:12.5px; cursor:pointer; max-width:180px}
-  .select-filter:hover{border-color:var(--accent-blue)}
+  /* dropdowns de filtro (Funil / Temperatura) na SIDEBAR — mesmo visual do seletor
+     de datas (superfície clara, borda, cantos arredondados, caret ▾ discreto). */
+  .side-filters{padding:6px 16px 4px; display:flex; flex-direction:column; gap:8px}
+  .side-select-wrap{position:relative}
+  .side-select-wrap::after{content:"▾"; position:absolute; right:11px; top:50%; transform:translateY(-50%);
+    pointer-events:none; color:var(--muted); font-size:10px}
+  .side-select{width:100%; appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    border:1px solid var(--border); background:var(--surface); color:var(--ink); border-radius:9px;
+    padding:8px 26px 8px 12px; font-size:12.5px; cursor:pointer; font-variant-numeric:tabular-nums}
+  .side-select:hover{border-color:var(--accent-blue)}
+  .side-select:focus{outline:none; border-color:var(--accent-blue); box-shadow:0 0 0 2px color-mix(in srgb,var(--accent-blue) 22%,transparent)}
 
   /* Toggle ON/OFF */
   .tax-toggle{display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none}
@@ -149,17 +157,30 @@
   .funnel{display:flex; flex-direction:column; gap:7px}
   .step{display:flex; align-items:center; justify-content:space-between; gap:14px; row-gap:8px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:11px 15px; border-left:4px solid var(--accent-blue)}
   .step.na{border-left-color:var(--border); opacity:.7}
-  /* Mar01: destaque das etapas MQL (azulado) e Gasto (avermelhado) + fonte mais forte */
+  /* Destaque das etapas: MQL/Vendas (azulado) · Gasto (avermelhado) · Faturamento e Receita (verde) */
   .step.hl-mql{background:var(--step-mql-bg); border-left-color:var(--step-mql-bd)}
   .step.hl-gasto{background:var(--step-gasto-bg); border-left-color:var(--step-gasto-bd)}
-  .step.hl-mql .m-val,.step.hl-gasto .m-val{font-size:26px; font-weight:800}
-  .step.hl-mql .m-label,.step.hl-gasto .m-label{font-weight:600; color:var(--ink)}
+  .step.hl-fat,.step.hl-rec{background:var(--step-fat-bg); border-left-color:var(--step-fat-bd)}
+  .step.hl-mql .m-val,.step.hl-gasto .m-val,.step.hl-fat .m-val,.step.hl-rec .m-val{font-size:24px; font-weight:700}
+  .step.hl-fat .m-val,.step.hl-rec .m-val{color:var(--good)}
+  .step.hl-mql .m-label,.step.hl-gasto .m-label,.step.hl-fat .m-label,.step.hl-rec .m-label{font-weight:600; color:var(--ink)}
   .step .step-main{min-width:0}
   .step .m-label{font-size:11.5px; color:var(--muted)}
-  .step .m-val{font-size:20px; font-weight:700; letter-spacing:-.02em; white-space:nowrap}
-  .step .secs{display:flex; gap:16px; flex-wrap:wrap; justify-content:flex-end; text-align:right; flex-shrink:0; margin-left:auto}
-  .step .secs .s-label{font-size:10.5px; color:var(--muted); display:block; margin-bottom:3px}
+  .step .m-val{font-size:20px; font-weight:600; letter-spacing:-.02em; white-space:nowrap}
+  /* secs NUNCA quebram linha; label e valor SEMPRE lado a lado; conversão à esquerda, custo à direita */
+  .step .secs{display:flex; gap:4px 16px; flex-wrap:nowrap; justify-content:flex-end; align-items:baseline; text-align:right; flex-shrink:1; min-width:0; margin-left:auto; overflow:hidden}
+  .step .secs .sec{display:inline-flex; align-items:baseline; gap:6px; white-space:nowrap}
+  .step .secs .sec.is-cost{order:2}
+  .step .secs .sec.is-conv{order:1}
+  .step .secs .s-label{font-size:10.5px; color:var(--muted); white-space:nowrap}
   .step .secs .s-val{font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap}
+  /* Acumulado por funil (3 colunas): funil compacto para caber sem quebrar */
+  .funil-seg-card .step{padding:8px 11px}
+  .funil-seg-card .step .m-val{font-size:16px}
+  .funil-seg-card .step.hl-mql .m-val,.funil-seg-card .step.hl-gasto .m-val,.funil-seg-card .step.hl-fat .m-val,.funil-seg-card .step.hl-rec .m-val{font-size:18px}
+  .funil-seg-card .step .secs{gap:2px 8px}
+  .funil-seg-card .step .secs .s-val{font-size:12px}
+  .funil-seg-card .step .secs .s-label{font-size:9.5px}
   .na-tag{font-size:10.5px; color:var(--muted); border:1px dashed var(--border); border-radius:999px; padding:2px 8px}
 
   /* Tables */
@@ -187,6 +208,15 @@
   table.dt td.dim{font-weight:500}
   table.dt thead th.sorted-asc::after{content:" ▲"; font-size:9px}
   table.dt thead th.sorted-desc::after{content:" ▼"; font-size:9px}
+  /* colunas congeladas à esquerda (Nome + Gasto nas tabelas hierárquicas).
+     O deslocamento "left" é calculado no JS (applyStickyLeft) porque a 1ª coluna
+     tem largura automática/redimensionável. */
+  table.dt.dt-stick .stk-l1, table.dt.dt-stick .stk-l2{position:sticky; z-index:1; background:var(--surface)}
+  table.dt.dt-stick thead .stk-l1, table.dt.dt-stick thead .stk-l2{z-index:3; background:var(--thead)}
+  table.dt.dt-stick tfoot .stk-l1, table.dt.dt-stick tfoot .stk-l2{position:sticky; z-index:1; background:var(--tfoot)}
+  table.dt.dt-stick tbody tr:hover .stk-l1, table.dt.dt-stick tbody tr:hover .stk-l2{background:var(--accent-blue-light)}
+  table.dt.dt-stick tbody tr.sel .stk-l1, table.dt.dt-stick tbody tr.sel .stk-l2{background:var(--selected)}
+  table.dt.dt-stick .stk-l2{border-right:1px solid var(--border)}
   table.dt tbody tr{cursor:pointer}
   table.dt tbody tr:hover{background:var(--accent-blue-light)}
   table.dt tbody tr.sel{background:var(--selected)}
@@ -195,6 +225,8 @@
   /* Mar01: tabelas diárias com dados centralizados (a dimensão/Dia continua à esquerda) */
   table.dt.dt-center thead th, table.dt.dt-center td, table.dt.dt-center tfoot td{text-align:center}
   table.dt.dt-center th.dim, table.dt.dt-center td.dim{text-align:left}
+  /* dt-centerall: centraliza TAMBÉM as colunas dim (tabela diária — inclui "Dia") */
+  table.dt.dt-centerall th.dim, table.dt.dt-centerall td.dim, table.dt.dt-centerall tfoot td.dim{text-align:center}
   /* Tabelas "fit": cabem 100% na largura (SEM scroll lateral); colunas numéricas
      uniformes, dimensão quebra linha. Mais densas para caber muitas colunas. */
   table.dt.dt-fit{width:100%; table-layout:fixed}
@@ -257,6 +289,7 @@
   .rel-metas-head{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px}
   .rel-metas-head .hint{font-size:12px; color:var(--muted); font-weight:400}
   .rel-metas-grid{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px}
+  .rel-metas-grid.rel-metas-grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
   @media(max-width:760px){.rel-metas-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
   .rel-meta{display:flex; flex-direction:column; gap:5px}
   .rel-meta span{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; font-weight:600}
