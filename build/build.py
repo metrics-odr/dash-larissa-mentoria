@@ -77,7 +77,7 @@ N_DIAS_CORTE = 5           # dias consecutivos acima do teto p/ considerar corte
 # --------------------------------------------------------------------------- #
 def fetch_csv(url: str) -> list[list[str]]:
     req = urllib.request.Request(url, headers={"User-Agent": "dash-template-bot/1.0"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    with urllib.request.urlopen(req, timeout=180) as resp:
         raw = resp.read().decode("utf-8", errors="replace")
     return list(csv.reader(io.StringIO(raw)))
 
