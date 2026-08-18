@@ -378,36 +378,30 @@
   .rel-wa-box{white-space:pre-wrap; word-break:break-word; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.55; margin:0; user-select:all; color:var(--ink)}
 
   /* ==========================================================================
-     CONTROLES ESCUROS — dropdowns de filtro (sidebar) + popover de período.
-     Seguem a identidade da SIDEBAR (escuro) nos DOIS temas. Bloco no fim do
-     arquivo p/ sobrescrever as regras genéricas acima. Ver tokens --ctl-* em
+     DROPDOWNS DE FILTRO (Funil / Temperatura) — dropdown CUSTOM, não-nativo.
+     O <select> nativo abria a lista do SO (visual "2004", sem cantos). Aqui a
+     lista é HTML estilizada, escura (identidade da sidebar) e arredondada, no
+     mesmo capricho do seletor de datas. O popover de período NÃO é mexido aqui —
+     ele segue o TEMA (claro no tema claro), como antes. Tokens --ctl-* em
      identidade-visual.css.
      ========================================================================== */
-  /* dropdowns de filtro (Funil / Temperatura) */
-  .side-select{background:var(--ctl-bg); color:var(--ctl-ink); border-color:var(--ctl-border)}
-  .side-select:hover{border-color:var(--ctl-accent)}
-  .side-select:focus{border-color:var(--ctl-accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--ctl-accent) 30%,transparent)}
-  .side-select option{background:var(--ctl-bg); color:var(--ctl-ink)}
-  .side-select-wrap::after{color:var(--ctl-muted)}
-
-  /* popover de período (calendário estilo Data Studio) */
-  .period-pop{background:var(--ctl-bg); border-color:var(--ctl-border); color:var(--ctl-ink); box-shadow:0 14px 44px rgba(0,0,0,.5)}
-  .period-pop .pp-presets{background:var(--ctl-elev); border-right-color:var(--ctl-border)}
-  .period-pop .pp-preset{color:var(--ctl-ink)}
-  .period-pop .pp-preset:hover{background:var(--ctl-hover); border-color:var(--ctl-border)}
-  .period-pop .pp-preset.active{background:var(--ctl-accent); border-color:var(--ctl-accent); color:#fff}
-  .period-pop .pp-cal-title,.period-pop .pp-dow span,.period-pop .pp-range{color:var(--ctl-muted)}
-  .period-pop .pp-cal-month{color:var(--ctl-ink)}
-  .period-pop .pp-nav{background:var(--ctl-elev); border-color:var(--ctl-border); color:var(--ctl-ink)}
-  .period-pop .pp-nav:hover{border-color:var(--ctl-accent); color:var(--ctl-accent)}
-  .period-pop .pp-day{color:var(--ctl-ink)}
-  .period-pop .pp-day:hover:not(.empty){border-color:var(--ctl-accent)}
-  .period-pop .pp-day.in{background:color-mix(in srgb,var(--ctl-accent) 26%,transparent)}
-  .period-pop .pp-day.sel{background:var(--ctl-accent); color:#fff}
-  .period-pop .pp-foot{background:var(--ctl-elev); border-top-color:var(--ctl-border)}
-  .period-pop .pp-foot .btn{background:var(--ctl-elev); border-color:var(--ctl-border); color:var(--ctl-ink)}
-  .period-pop .pp-foot .btn:hover{border-color:var(--ctl-accent)}
-  .period-pop .pp-foot .btn.primary{background:var(--ctl-accent); border-color:var(--ctl-accent); color:#fff}
+  .csel{position:relative}
+  .csel-btn{width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px;
+    background:var(--ctl-bg); color:var(--ctl-ink); border:1px solid var(--ctl-border); border-radius:10px;
+    padding:9px 12px; font-size:12.5px; cursor:pointer; text-align:left; font-variant-numeric:tabular-nums}
+  .csel-btn:hover{border-color:var(--ctl-accent)}
+  .csel.open .csel-btn{border-color:var(--ctl-accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--ctl-accent) 28%,transparent)}
+  .csel-val{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .csel-caret{color:var(--ctl-muted); font-size:10px; transition:transform .15s; flex:0 0 auto}
+  .csel.open .csel-caret{transform:rotate(180deg)}
+  .csel-pop{position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:50;
+    background:var(--ctl-elev); border:1px solid var(--ctl-border); border-radius:12px;
+    box-shadow:0 12px 34px rgba(0,0,0,.5); padding:5px; display:flex; flex-direction:column; gap:2px}
+  .csel-pop[hidden]{display:none}
+  .csel-opt{text-align:left; background:transparent; color:var(--ctl-ink); border:1px solid transparent;
+    border-radius:8px; padding:7px 10px; font-size:12.5px; cursor:pointer; white-space:nowrap}
+  .csel-opt:hover{background:var(--ctl-hover)}
+  .csel-opt.sel{background:var(--ctl-accent); border-color:var(--ctl-accent); color:#fff; font-weight:600}
 
   /* ---------- seletor de granularidade (Looker Studio) nos gráficos ---------- */
   .panel-chart.has-gran,.card.has-gran{position:relative}

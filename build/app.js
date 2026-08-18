@@ -1147,17 +1147,34 @@ document.getElementById('clearBtn').addEventListener('click',()=>{ STATE.mSelC.c
   STATE.filterFunil=''; STATE.filterTemp=''; syncFunilFilters(); applyPreset('mes'); });
 /* filtro global: Funil (DIAG/APD-BR/APD-MUNDO) e Temperatura (Quente/Frio) —
    afeta leadsActive()/metaActive() em todas as páginas (topbar). */
-function syncFunilFilters(){
-  const fe=document.getElementById('filterFunil'), te=document.getElementById('filterTemp');
-  if(fe) fe.value=STATE.filterFunil; if(te) te.value=STATE.filterTemp;
+/* Dropdown CUSTOM (não-nativo) p/ os filtros de Funil/Temperatura — lista HTML
+   estilizada (escura, arredondada), no lugar do <select> nativo do SO. */
+const CSELS=[];
+function buildCsel(hostId, options, getVal, setVal){
+  const host=document.getElementById(hostId); if(!host) return;
+  const label=v=>{ const o=options.find(x=>x.v===v); return o?o.label:options[0].label; };
+  host.innerHTML=`<button type="button" class="csel-btn"><span class="csel-val"></span><span class="csel-caret">▾</span></button>`
+    +`<div class="csel-pop" hidden>${options.map(o=>`<button type="button" class="csel-opt" data-v="${escHtml(o.v)}">${escHtml(o.label)}</button>`).join('')}</div>`;
+  const btn=host.querySelector('.csel-btn'), pop=host.querySelector('.csel-pop'), valEl=host.querySelector('.csel-val');
+  const closeAll=()=>{ CSELS.forEach(c=>{ c.pop.hidden=true; c.host.classList.remove('open'); }); };
+  const sync=()=>{ const v=getVal(); valEl.textContent=label(v);
+    pop.querySelectorAll('.csel-opt').forEach(o=>o.classList.toggle('sel', o.dataset.v===v)); };
+  btn.addEventListener('click',e=>{ e.stopPropagation(); const isOpen=!pop.hidden; closeAll(); if(!isOpen){ pop.hidden=false; host.classList.add('open'); } });
+  pop.addEventListener('click',e=>e.stopPropagation());
+  pop.querySelectorAll('.csel-opt').forEach(o=>o.addEventListener('click',()=>{ setVal(o.dataset.v); sync(); closeAll(); renderAll(); }));
+  CSELS.push({host,pop,sync});
+  sync();
 }
+function syncFunilFilters(){ CSELS.forEach(c=>c.sync()); }
 (function wireFunilFilters(){
-  const fe=document.getElementById('filterFunil'), te=document.getElementById('filterTemp');
-  if(fe){ fe.innerHTML='<option value="">Todos os funis</option>'+FUNIS.map(f=>`<option value="${f}">${f}</option>`).join('');
-    fe.addEventListener('change',()=>{ STATE.filterFunil=fe.value; renderAll(); }); }
-  if(te){ te.addEventListener('change',()=>{ STATE.filterTemp=te.value; renderAll(); }); }
-  syncFunilFilters();
+  buildCsel('cselFunil',
+    [{v:'',label:'Todos os funis'}].concat(FUNIS.map(f=>({v:f,label:f}))),
+    ()=>STATE.filterFunil, v=>STATE.filterFunil=v);
+  buildCsel('cselTemp',
+    [{v:'',label:'Todas as temperaturas'},{v:'Quente',label:'Quente'},{v:'Frio',label:'Frio'}],
+    ()=>STATE.filterTemp, v=>STATE.filterTemp=v);
 })();
+document.addEventListener('click',()=>{ CSELS.forEach(c=>{ c.pop.hidden=true; c.host.classList.remove('open'); }); });
 document.getElementById('refreshBtn').addEventListener('click',function(){ this.classList.add('loading'); location.href=location.pathname+'?t='+Date.now()+location.hash; });
 
 /* painel de Metas & parâmetros — edita ao vivo, salva em localStorage e recolore
