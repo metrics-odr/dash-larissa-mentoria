@@ -326,8 +326,9 @@ def build_sales(leads: list, sales_rows: list) -> list:
     sidx = header_index(
         sheader,
         {"date": ["data_envio", "data formatada", "data"], "email": ["email"], "phone": ["telefone"],
-         "caixa": ["caixavenda"], "fat": ["faturamentovenda"], "contr": ["contratante"]},
-        {"date": 0, "email": 4, "phone": 9, "caixa": 10, "fat": 11, "contr": None},
+         "caixa": ["caixavenda"], "fat": ["faturamentovenda"], "contr": ["contratante"],
+         "renov": ["renovacao", "renovação"]},
+        {"date": 0, "email": 4, "phone": 9, "caixa": 10, "fat": 11, "contr": None, "renov": None},
     )
     def older(idx_a, idx_b):  # -> índice do lead com created mais antigo (None-safe)
         da, db = leads[idx_a]["d"] or "9999", leads[idx_b]["d"] or "9999"
@@ -367,6 +368,16 @@ def build_sales(leads: list, sales_rows: list) -> list:
             return False                       # negação explícita -> não assinou
         return ("assinou" in v or "assinad" in v or v in ("true", "sim", "1", "verdadeiro", "x"))
 
+    renov_i = sidx.get("renov")
+
+    def is_renewal(row):
+        """Coluna RENOVAÇÃO (checkbox): TRUE/✅/Sim/1 = renovação de uma
+        assinatura existente, não uma venda nova."""
+        if renov_i is None:
+            return False
+        v = norm(cell(row, renov_i))
+        return v in ("true", "sim", "1", "verdadeiro", "x", "✅") or "✅" in cell(row, renov_i)
+
     out: list = []
     for row in sales_rows[1:]:
         if not any((c or "").strip() for c in row):
@@ -378,8 +389,13 @@ def build_sales(leads: list, sales_rows: list) -> list:
         idx = by_email.get(email) if email else None
         if idx is None and phone:
             idx = by_phone.get(phone)
+        d = sale_date(row)
+        if d and d[5:7] == "08" and is_renewal(row):
+            # Renovação (não venda nova): não pode inflar o mês de agosto —
+            # reclassificada para 31/07 do mesmo ano (pedido do cliente).
+            d = f"{d[:4]}-07-31"
         sale = {
-            "d": sale_date(row),
+            "d": d,
             "vendas": 1,
             "fat": to_float(cell(row, sidx["fat"])),
             "caixa": to_float(cell(row, sidx["caixa"])),
