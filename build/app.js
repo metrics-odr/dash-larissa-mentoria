@@ -731,7 +731,7 @@ const AD_COLS=[
   {k:'gasto',label:'Gasto'},{k:'im',label:'Impr.'},{k:'cpm',label:'CPM'},{k:'ctr',label:'CTR'},
   {k:'leads',label:'Leads'},{k:'cpl',label:'CPL'},{k:'mqls',label:'MQLs'},{k:'tx',label:'Tx‑MQL'},{k:'cpmql',label:'CPMQL'},
   {k:'agendamentos',label:'Agendamentos'},{k:'txag',label:'Tx‑Agend.'},{k:'cpag',label:'CPAG'},
-  {k:'reunioes',label:'Reuniões'},{k:'noshow',label:'No‑Show'},{k:'cprr',label:'CPRR'},
+  {k:'convagd',label:'ConvAGD'},
   {k:'vendas',label:'Vendas'},{k:'cac',label:'CAC'},{k:'fat',label:'Faturamento'},{k:'roas',label:'ROAS'},
   {k:'link',label:'Link',dim:true,stk:'r'},
 ];
@@ -741,7 +741,7 @@ function adRowCells(ad,a,struct){
     gasto:d.gasto, im:a.im, cpm:d.cpm, ctr:d.ctr,
     leads:a.leads, cpl:d.cpl, mqls:a.mqls, tx:d.tx, cpmql:d.cpmql,
     agendamentos:s.agendamentos, txag:s.txag, cpag:s.cpag,
-    reunioes:s.reunioes, noshow:s.txnoshow, cprr:s.cprr,
+    convagd:s.convagd,
     vendas:s.vendas, cac:s.cac, fat:s.fat, roas:s.roas,
     link:adLinkCell(ad),
     _cpag:s.cpag, _cac:s.cac, status:null};   // valores crus p/ colorir vs meta
@@ -760,9 +760,7 @@ function relRenderAdTable(id,list){
     {key:'agendamentos',label:'Agendamentos',type:'int'},
     {key:'txag',label:'Tx‑Agend.',type:'pct'},
     {key:'cpag',label:'CPAG',type:'brl'},
-    {key:'reunioes',label:'Reuniões',type:'int'},
-    {key:'noshow',label:'No‑Show',type:'pct'},
-    {key:'cprr',label:'CPRR',type:'brl'},
+    {key:'convagd',label:'ConvAGD',type:'pct'},
     {key:'vendas',label:'Vendas',type:'int'},
     {key:'cac',label:'CAC',type:'brl'},
     {key:'fat',label:'Faturamento',type:'brl'},
