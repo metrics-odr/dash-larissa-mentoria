@@ -396,12 +396,19 @@ def build_sales(leads: list, sales_rows: list) -> list:
             d = f"{d[:4]}-07-31"
         sale = {
             "d": d,
+            # Data de COORTE = data de cadastro do lead que comprou. Usada SÓ nas
+            # tabelas de otimização (campanha/conjunto/anúncio + Top/Piores), pra
+            # amarrar a venda ao gasto que a gerou: lead captado em 04/ago que
+            # fecha em 24/ago conta no dia 04 ali, e no dia 24 em todo o resto
+            # (caixa/faturamento por dia). Sem lead casado, cai na data da venda.
+            "dl": d,
             "vendas": 1,
             "fat": to_float(cell(row, sidx["fat"])),
             "caixa": to_float(cell(row, sidx["caixa"])),
         }
         if idx is not None:
             l = leads[idx]
+            sale["dl"] = l["d"] or d
             sale["funil"] = l["funil"]
             sale["temp"] = l["temp"]
             sale["src"] = l["src"]

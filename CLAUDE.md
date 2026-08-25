@@ -99,6 +99,31 @@ Spreadsheet ID: `1P7c_7rutl0fdnqIc2DX5DuGl6H9E7WRU_gzDpOdphkw` (planilha central
 
 URL de export CSV: `https://docs.google.com/spreadsheets/d/<ID>/export?format=csv&gid=<GID>`
 
+> As colunas de **UTM na aba Compradores** (preenchidas por PROCV/VLOOKUP na
+> planilha) **não são lidas pelo build** — `build_sales()` cruza Compradores ×
+> Leads por e-mail (fallback: últimos 8 dígitos do telefone) e herda
+> funil/temperatura/campanha/conjunto/anúncio do lead casado. Podem ser apagadas
+> da planilha sem afetar o dashboard.
+
+### Atribuição de vendas — DUAS datas por venda
+Cada registro em `sales[]` carrega duas datas (`build.py` → `build_sales()`):
+
+| Campo | O que é | Onde é usado |
+|-------|---------|--------------|
+| `d`  | **data da venda** (`data_envio`) | Visão Geral, Relatório (espelho), funis, KPIs, gráficos e **tabelas diárias** — "quanto entrou de caixa por dia" / panorama do mês |
+| `dl` | **data de cadastro do lead** que comprou (coorte) | **Só** as 3 tabelas hierárquicas de otimização (Campanha/Conjunto/Anúncio, `tCamp`/`tAdset`/`tAd`) e **Top/Piores Anúncios** (`relTop`) |
+
+Motivo: nas tabelas de decisão (escalar/cortar), CAC/ROAS/Fat. precisam bater com
+o **gasto que gerou aquele lead**. Um lead captado em 04/ago que fecha em 24/ago
+conta no dia 04 ali. Sem isso, numa janela de 7 dias a venda entra num anúncio
+que não teve gasto naquela janela e produz **CAC = R$ 0** (número fabricado).
+Sem lead casado, `dl` cai na própria data da venda.
+
+Em `app.js`: `salesActive()` filtra por `d`; `salesCohort()` filtra por `dl`.
+`metaScope()` devolve os dois escopos (`fS` = data da venda, `fSc` = coorte).
+Os totais de vendas **divergem de propósito** entre a tabela diária e a
+hierarquia num mesmo período — há nota explicativa na UI em ambos os blocos.
+
 ### Regra de Lead Qualificado (MQL)
 Coluna `Qualificação` == `QLF` **ou** coluna `score` == `10` (aba Leads).
 Lógica em `build.py` → `is_qualified`. Sem faixa de faturamento neste

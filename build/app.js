@@ -57,6 +57,13 @@ const metaActive  = ()=> META.filter(m=>dateActive(m.d) && funilTempMatch(m));
 /* Vendas ativas: filtradas pela DATA DA VENDA e pelo filtro global de funil/temp.
    Visão Geral usa TODAS; a página Meta Ads usa só as de tráfego pago (attributed). */
 const salesActive = ()=> SALES.filter(s=>dateActive(s.d) && funilTempMatch(s));
+/* Vendas por COORTE: mesma lista, mas filtrada pela DATA DE CADASTRO DO LEAD que
+   comprou (campo `dl`, vindo de build.py). Usada SÓ nas tabelas de otimização
+   (campanha/conjunto/anúncio e Top/Piores anúncios), onde CAC/ROAS precisam
+   amarrar a venda ao gasto que a gerou — um lead captado em 04/ago que fecha em
+   24/ago entra no dia 04 ali. Todo o resto (KPIs, funil, gráficos, tabela diária)
+   continua na data da venda, pra refletir o que entrou de caixa por dia. */
+const salesCohort = ()=> SALES.filter(s=>dateActive(s.dl||s.d) && funilTempMatch(s));
 
 /* ---------------- aggregation ---------------- */
 function derive(a){
@@ -882,7 +889,10 @@ function renderRelBrief(){
    anúncios no total, pra não sugerir que 10 linhas = 10 vencedores. */
 function renderRelAds(){
   const fL=leadsActive(), fM=metaActive();
-  const fS=salesActive().filter(s=>s.attributed);   // vendas de tráfego pago, por anúncio
+  // Tabela de OTIMIZAÇÃO: vendas datadas pelo CADASTRO do lead (coorte, `dl`), não
+  // pela data da venda — o ranking e o CAC/ROAS de cada anúncio precisam bater com
+  // o gasto que gerou aquele lead. Demais visões da aba seguem na data da venda.
+  const fS=salesCohort().filter(s=>s.attributed);   // vendas de tráfego pago, por anúncio
   const struct=adStructMap(fM,fL);
   const agg=buildAgg(fL,fM,fS,'ad');
   const pool=Object.entries(agg).filter(([ad,a])=>a.sp>0).map(([ad,a])=>({ad, a, struct:struct[ad]||{camp:'—',adset:'—'}}));
@@ -953,15 +963,18 @@ function dailyCells(x,d,isTotal){
 /* ---------------- PAGE 2: Meta Ads ---------------- */
 /* Página de TRÁFEGO PAGO: só leads de mídia paga (src meta/google — exclui
    orgânico, senão os agendamentos/MQLs orgânicos entrariam) e só vendas
-   atribuídas ao tráfego (attributed). fS acompanha o mesmo escopo (camp/adset/ad). */
+   atribuídas ao tráfego (attributed). fS acompanha o mesmo escopo (camp/adset/ad).
+   fSc = mesmas vendas, mas datadas pelo CADASTRO DO LEAD (coorte) — alimenta só as
+   3 tabelas hierárquicas de otimização; fS (data da venda) alimenta o resto. */
 function metaScope(ex){
   let fL=leadsActive().filter(l=>l.src==='meta'||l.src==='google');
   let fM=metaActive();
   let fS=salesActive().filter(s=>s.attributed);
-  if(ex!=='C'&&STATE.mSelC.size){ fL=fL.filter(r=>STATE.mSelC.has(r.camp)); fM=fM.filter(r=>STATE.mSelC.has(r.camp)); fS=fS.filter(r=>STATE.mSelC.has(r.camp)); }
-  if(ex!=='A'&&STATE.mSelA.size){ fL=fL.filter(r=>STATE.mSelA.has(r.adset)); fM=fM.filter(r=>STATE.mSelA.has(r.adset)); fS=fS.filter(r=>STATE.mSelA.has(r.adset)); }
-  if(ex!=='D'&&STATE.mSelAd.size){ fL=fL.filter(r=>STATE.mSelAd.has(r.ad)); fM=fM.filter(r=>STATE.mSelAd.has(r.ad)); fS=fS.filter(r=>STATE.mSelAd.has(r.ad)); }
-  return {fL,fM,fS}; }
+  let fSc=salesCohort().filter(s=>s.attributed);
+  if(ex!=='C'&&STATE.mSelC.size){ fL=fL.filter(r=>STATE.mSelC.has(r.camp)); fM=fM.filter(r=>STATE.mSelC.has(r.camp)); fS=fS.filter(r=>STATE.mSelC.has(r.camp)); fSc=fSc.filter(r=>STATE.mSelC.has(r.camp)); }
+  if(ex!=='A'&&STATE.mSelA.size){ fL=fL.filter(r=>STATE.mSelA.has(r.adset)); fM=fM.filter(r=>STATE.mSelA.has(r.adset)); fS=fS.filter(r=>STATE.mSelA.has(r.adset)); fSc=fSc.filter(r=>STATE.mSelA.has(r.adset)); }
+  if(ex!=='D'&&STATE.mSelAd.size){ fL=fL.filter(r=>STATE.mSelAd.has(r.ad)); fM=fM.filter(r=>STATE.mSelAd.has(r.ad)); fS=fS.filter(r=>STATE.mSelAd.has(r.ad)); fSc=fSc.filter(r=>STATE.mSelAd.has(r.ad)); }
+  return {fL,fM,fS,fSc}; }
 /* selecao multipla: Ctrl adiciona (OR) sem sumir as demais linhas; clique simples troca a ancora */
 function selDim(dim,key,ctrl){
   const sets={C:STATE.mSelC,A:STATE.mSelA,D:STATE.mSelAd}, s=sets[dim];
@@ -1006,16 +1019,20 @@ function renderMeta(){
   function totRowOf(tt){const d=derive(tt),s=salesOf(tt);return{dim:null,gasto:d.gasto,cpm:d.cpm,ctr:d.ctr,cr:d.cr,convlp:d.convlp,leads:tt.leads,cpl:d.cpl,tx:d.tx,mqls:tt.mqls,cpmql:d.cpmql,
     agd:s.agendamentos,txag:s.txag,cpag:s.cpag,
     convagd:s.convagd,vendas:s.vendas,cac:s.cac,fat:s.fat,tm:s.tm,roas:s.roas,caixa:s.caixa,roascx:s.roascx};}
+  // ATENÇÃO: aqui (e só aqui, na hierarquia) as vendas vêm de `fSc` — datadas pelo
+  // CADASTRO do lead que comprou, não pela data da venda. É o que mantém Vendas/
+  // CAC/ROAS/Fat. amarrados ao gasto que gerou aquele lead. O funil, os gráficos e
+  // a tabela diária acima continuam com `fS` (data da venda).
   const Sc=metaScope('C'), Sa=metaScope('A'), Sd=metaScope('D');
-  const aggC=buildAgg(Sc.fL,Sc.fM,Sc.fS,'camp'), aggA=buildAgg(Sa.fL,Sa.fM,Sa.fS,'adset'), aggD=buildAgg(Sd.fL,Sd.fM,Sd.fS,'ad');
+  const aggC=buildAgg(Sc.fL,Sc.fM,Sc.fSc,'camp'), aggA=buildAgg(Sa.fL,Sa.fM,Sa.fSc,'adset'), aggD=buildAgg(Sd.fL,Sd.fM,Sd.fSc,'ad');
   // Tabelas hierárquicas: NÃO usam "fit" — a dimensão (campanha/conjunto/anúncio)
   // tem largura automática p/ caber o nome INTEIRO por padrão, nunca quebra linha,
   // é redimensionável (arrastar borda) e 2 cliques na borda auto-ajusta (Sheets/Looker).
-  renderTable({id:'tCamp', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Campanha'}:c), rows:hierRows(aggC), total:totRowOf(totals(Sc.fL,Sc.fM,Sc.fS)),
+  renderTable({id:'tCamp', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Campanha'}:c), rows:hierRows(aggC), total:totRowOf(totals(Sc.fL,Sc.fM,Sc.fSc)),
     selectable:true, selSet:STATE.mSelC, onSelect:(k,e)=>selDim('C',k,e&&(e.ctrlKey||e.metaKey))});
-  renderTable({id:'tAdset', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Conjunto',big:true}:c), rows:hierRows(aggA), total:totRowOf(totals(Sa.fL,Sa.fM,Sa.fS)),
+  renderTable({id:'tAdset', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Conjunto',big:true}:c), rows:hierRows(aggA), total:totRowOf(totals(Sa.fL,Sa.fM,Sa.fSc)),
     selectable:true, selSet:STATE.mSelA, onSelect:(k,e)=>selDim('A',k,e&&(e.ctrlKey||e.metaKey))});
-  renderTable({id:'tAd', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Anúncio'}:c), rows:hierRows(aggD), total:totRowOf(totals(Sd.fL,Sd.fM,Sd.fS)),
+  renderTable({id:'tAd', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Anúncio'}:c), rows:hierRows(aggD), total:totRowOf(totals(Sd.fL,Sd.fM,Sd.fSc)),
     selectable:true, selSet:STATE.mSelAd, onSelect:(k,e)=>selDim('D',k,e&&(e.ctrlKey||e.metaKey))});
 
   // Mar03/Mar10: cada gráfico varia a dimensão da sua tabela — MQLs por dia, 1 linha
