@@ -160,7 +160,11 @@ Ao ver um deles ruim, aponte a **etapa** que perdeu eficiência — não recomen
 
 ## Top Anúncios e Piores Anúncios (o que a tabela já faz)
 
-A aba calcula sozinha, por anúncio (com gasto no período):
+A aba calcula sozinha, por **estrutura** (campanha × conjunto × anúncio, com
+gasto no período) — o mesmo nome de anúncio reaproveitado em várias
+campanhas/conjuntos aparece **uma linha por estrutura**, cada uma com seu
+próprio gasto/resultado (nunca somado nem escondido atrás da estrutura de
+maior gasto):
 - **Top**: ranqueado pelo **resultado mais profundo disponível** (Venda → Reunião
   Realizada → Agendamento → MQL), maior volume + menor custo, **amostra relevante primeiro**.
 - A coluna **Status** mostra a recomendação **Escalar / Manter / Observar / Cortar**

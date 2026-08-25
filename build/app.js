@@ -681,28 +681,6 @@ function metaColorClass(v, meta){
 
 function adLinkCell(name){ const u=AD_LINKS[name];
   return u?`<a class="rel-adlink" href="${escHtml(u)}" target="_blank" rel="noopener">Abrir ▸</a>`:'<span class="rel-adlink off">—</span>'; }
-
-/* ad -> (campanha, conjunto) dominantes por gasto no Meta (fallback: lead).
-   Um anúncio pode rodar em mais de uma campanha/conjunto; fica com a combinação
-   de maior gasto. */
-function adStructMap(fM,fL){
-  const acc={};
-  fM.forEach(r=>{ const byCamp=acc[r.ad]=acc[r.ad]||{};
-    const byAdset=byCamp[r.camp]=byCamp[r.camp]||{};
-    byAdset[r.adset]=(byAdset[r.adset]||0)+r.sp; });
-  const out={};
-  Object.entries(acc).forEach(([ad,byCamp])=>{
-    let best=null;
-    Object.entries(byCamp).forEach(([camp,byAdset])=>{
-      Object.entries(byAdset).forEach(([adset,sp])=>{
-        if(!best||sp>best.sp) best={camp,adset,sp};
-      });
-    });
-    out[ad]={camp:best.camp,adset:best.adset};
-  });
-  fL.forEach(r=>{ if(!out[r.ad]) out[r.ad]={camp:r.camp,adset:r.adset}; });
-  return out;
-}
 /* amostra relevante para JULGAR o anúncio (senão: "Em observação"). O limiar de
    MQLs vem do painel de metas (volume mínimo amostral), editável ao vivo. */
 function adSampleOk(a){ return a.sp>=SAMPLE_MIN_SPEND && a.mqls>=METAS.volMin; }
@@ -799,7 +777,7 @@ function relRenderAdTable(id,list){
   const rows=list.map(item=>{
     const cells=adRowCells(item.ad,item.a,item.struct);
     cells.status='';  // placeholder textual; o chip real entra via afterRender
-    return {k:item.ad, cells, _rec:adRecommendation(item.a), _cpag:cells._cpag, _cac:cells._cac};
+    return {k:item.key||item.ad, cells, _rec:adRecommendation(item.a), _cpag:cells._cpag, _cac:cells._cac};
   });
   renderTable({
     id, cols, rows, center:true,   // Mar10: só as MÉTRICAS centralizam; dim fica à esquerda (CSS .dt-center)
@@ -915,15 +893,27 @@ function renderRelBrief(){
    só "campeão vs. em observação"; o pill do título continua contando quantos
    têm amostra relevante (adSampleOk) DE quantos anúncios no total, pra não
    sugerir que 10 linhas = 10 vencedores. */
+/* chave composta campanha+conjunto+anúncio: o MESMO nome de anúncio pode rodar
+   em várias campanhas/conjuntos (reaproveitado em testes/estruturas diferentes)
+   — cada estrutura vira sua PRÓPRIA linha na tabela, com o gasto/resultado só
+   dela. Sem isso a tabela somava tudo debaixo do nome do anúncio e rotulava a
+   linha só com a estrutura de MAIOR gasto, escondendo as outras (inclusive uma
+   que estivesse indo bem sozinha). '' não aparece em nome de campanha/
+   conjunto/anúncio real, então é seguro como separador. */
+const SEP='';
+const structKey=r=>(r.camp||'—')+SEP+(r.adset||'—')+SEP+(r.ad||'—');
 function renderRelAds(){
-  const fL=leadsActive(), fM=metaActive();
+  const fL=leadsActive().map(r=>({...r, _k:structKey(r)}));
+  const fM=metaActive().map(r=>({...r, _k:structKey(r)}));
   // Tabela de OTIMIZAÇÃO: vendas datadas pelo CADASTRO do lead (coorte, `dl`), não
   // pela data da venda — o ranking e o CAC/ROAS de cada anúncio precisam bater com
   // o gasto que gerou aquele lead. Demais visões da aba seguem na data da venda.
-  const fS=salesCohort().filter(s=>s.attributed);   // vendas de tráfego pago, por anúncio
-  const struct=adStructMap(fM,fL);
-  const agg=buildAgg(fL,fM,fS,'ad');
-  const pool=Object.entries(agg).filter(([ad,a])=>a.sp>0).map(([ad,a])=>({ad, a, struct:struct[ad]||{camp:'—',adset:'—'}}));
+  const fS=salesCohort().filter(s=>s.attributed).map(r=>({...r, _k:structKey(r)}));   // vendas de tráfego pago, por estrutura
+  const agg=buildAgg(fL,fM,fS,'_k');
+  const pool=Object.entries(agg).filter(([k,a])=>a.sp>0).map(([k,a])=>{
+    const [camp,adset,ad]=k.split(SEP);
+    return {ad, a, struct:{camp,adset}, key:k};
+  });
 
   const all=pool.slice().sort((x,y)=>{ const sx=adSampleOk(x.a), sy=adSampleOk(y.a);
     if(sx!==sy) return sx?-1:1; return cmpBest(x.a,y.a); })
@@ -932,7 +922,7 @@ function renderRelAds(){
 
   relRenderAdTable('relTop',all);
   document.getElementById('relTopCount').textContent =
-    champs+' '+(champs===1?'campeão':'campeões')+' de '+all.length+' anúncio'+(all.length===1?'':'s')+' com gasto';
+    champs+' '+(champs===1?'campeão':'campeões')+' de '+all.length+' estrutura'+(all.length===1?'':'s')+' (campanha·conjunto·anúncio) com gasto';
 }
 
 /* nota de referência do painel de metas (mostra as metas ativas + legenda de cor) */
