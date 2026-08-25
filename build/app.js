@@ -200,6 +200,19 @@ function colWidth(cfg,c){ const saved=(STATE.colw[cfg.id]||{})[c.key];
   if(c.type==='dim') return autoDimWidth(cfg,c);   // por padrão, cabe o nome inteiro
   if(c.type==='brl') return 110;   // "R$ 1.487,42" não cabia nos 92px padrão (cortava com "…")
   return 92; }
+/* largura das colunas em tabelas "fit" (dt-fit): mede o texto real (maior valor da
+   coluna) em vez de dividir o espaço restante igualmente — evita cortar números
+   com "…"; se a soma ultrapassar 100% do painel, a tabela rola lateralmente
+   (tbl-wrap já tem overflow:auto) em vez de espremer as colunas. */
+function fitColWidth(cfg,c){
+  if(c.w) return c.w;
+  if(c.type==='date') return 74;
+  if(c.type==='dim') return c.big?210:116;
+  let max=textWidth(c.label||'',FONT_HEAD);
+  (cfg.rows||[]).forEach(r=>{ const w=textWidth(fmtStd(c.type,r.cells[c.key]),FONT_NUM); if(w>max) max=w; });
+  if(cfg.total && cfg.total[c.key]!=null){ const w=textWidth(fmtStd(c.type,cfg.total[c.key]),FONT_NUM); if(w>max) max=w; }
+  return Math.max(46, Math.round(max)+16);
+}
 function renderTable(cfg){
   const table=document.getElementById(cfg.id); if(!table) return;
   table.classList.toggle('dt-center', !!cfg.center);   // Mar01: dados centralizados
@@ -218,12 +231,8 @@ function renderTable(cfg){
   cfg.cols.forEach(c=>{ if(c.heat){ const vs=rows.map(r=>r.cells[c.key]).filter(v=>v!=null&&isFinite(v)); ext[c.key]=[Math.min(...vs),Math.max(...vs)]; }});
   // métricas de custo sempre com "R$" (mesmo em tabelas densas/fit) — % nas de taxa, sem símbolo nas demais
   const fmt=(t,v)=> t==='brl'?brl(v):t==='pct'?pct(v):t==='int'?intf(v):t==='num'?numf(v):t==='date'?brdate(v):t==='html'?(v==null?'-':String(v)):dimf(v);
-  const widths=fit?[]:cfg.cols.map(c=>colWidth(cfg,c)); const totalW=widths.reduce((a,b)=>a+b,0);
-  // modo fit: dimensão/data com largura fixa; colunas numéricas dividem o resto por igual
-  const fitW=c=> c.w?c.w+'px' : c.type==='date'?'74px' : c.type==='dim'?(c.big?'210px':'116px') : '';
-  const colgroup='<colgroup>'+cfg.cols.map((c,i)=>{
-    const w=fit?fitW(c):(widths[i]+'px'); return `<col${w?` style="width:${w}"`:''}>`;
-  }).join('')+'</colgroup>';
+  const widths=cfg.cols.map(c=>fit?fitColWidth(cfg,c):colWidth(cfg,c)); const totalW=widths.reduce((a,b)=>a+b,0);
+  const colgroup='<colgroup>'+cfg.cols.map((c,i)=>`<col style="width:${widths[i]}px">`).join('')+'</colgroup>';
   const esc=s=>String(s==null?'':s).replace(/"/g,'&quot;');
   const stkCls=c=>c.stk?' stk-'+c.stk:'';
   let thead='<thead><tr>'+cfg.cols.map((c,i)=>{
@@ -247,7 +256,7 @@ function renderTable(cfg){
     const v=cfg.total[c.key]; const isFirst=i===0&&v==null;
     return `<td class="${c.type==='dim'?'dim':''}${stkCls(c)}" title="${isFirst?'Total Geral':esc(fmtStd(c.type,v))}">${isFirst?'Total Geral':fmt(c.type,v)}</td>`;
   }).join('')+'</tr></tfoot>'; }
-  table.style.width=fit?'100%':totalW+'px';
+  table.style.width=fit?`max(100%, ${totalW}px)`:totalW+'px';
   table.innerHTML=colgroup+thead+tbody+tfoot;
   const cols=table.querySelector('colgroup').children;
   // colunas congeladas à esquerda: calcula o deslocamento (left) de cada uma a

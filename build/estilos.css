@@ -112,7 +112,7 @@
      disponível — sem isso, o grid podia "vazar" e criar scroll horizontal na PÁGINA. */
   .two-col{grid-template-columns:380px minmax(0,1fr)}
   .three-col{grid-template-columns:360px minmax(0,1fr)}
-  .funnel-grid{grid-template-columns:390px minmax(0,1fr); align-items:start}
+  .funnel-grid{grid-template-columns:330px minmax(0,1fr); align-items:start}
   .funnel-charts{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-content:start}
   /* Mar02: três colunas de tamanho igual · Mar05: quatro gráficos na mesma linha */
   .trio{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; align-items:stretch}
