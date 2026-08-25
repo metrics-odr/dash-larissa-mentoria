@@ -721,6 +721,36 @@ function cmpBest(a,b){ const qa=adQuality(a), qb=adQuality(b);   // <0 => a ante
   if(qa.vol!==qb.vol)   return qb.vol-qa.vol;
   return qa.cost-qb.cost; }
 
+/* Recomendação (Escalar/Manter/Observar/Cortar) pro Status da tabela. Meta
+   principal é CAC, mas CAC bom não escala sozinho: só "Escalar" com Faturamento
+   provado (venda com valor) E CPAG dentro da meta (não pode ter custo de
+   agendamento alto escondido atrás de um CAC ok). Sem amostra mínima ou sem
+   meta definida pra julgar, cai em "Observar" — nunca escala/corta no escuro. */
+function adRecommendation(a){
+  if(!adSampleOk(a)) return 'observar';
+  const s=salesOf(a);
+  const cacClass=metaColorClass(s.cac, METAS.cac);
+  const cpagClass=metaColorClass(s.cpag, METAS.cpagd);
+  const hasFat=s.fat!=null && s.fat>0;
+  if(s.cac!=null){                      // já tem venda(s) atribuída(s): CAC manda
+    if(cacClass==='mc-red') return 'cortar';
+    if(cacClass==='mc-yellow') return 'manter';
+    // CAC bom (ou meta de CAC não definida) — só escala com Faturamento provado
+    // e sem CPAG estourado; senão segura (não escala às cegas).
+    if(hasFat && cpagClass!=='mc-red') return 'escalar';
+    return 'manter';
+  }
+  if(s.agendamentos!=null){             // ainda sem venda: julga só pelo CPAG
+    if(cpagClass==='mc-red') return 'cortar';
+    if(cpagClass==='mc-green') return 'manter';   // não escala sem CAC provado
+    return 'observar';
+  }
+  return 'observar';                    // só MQL/lead: fundo de funil raso demais p/ decidir
+}
+const REC_LABEL={escalar:'Escalar',manter:'Manter',observar:'Observar',cortar:'Cortar'};
+const REC_CLASS={escalar:'c-green',manter:'c-blue',observar:'c-yellow',cortar:'c-red'};
+const recChip=rec=>`<span class="rel-chip ${REC_CLASS[rec]}">${REC_LABEL[rec]}</span>`;
+
 /* 22 colunas pedidas pelo cliente + coluna própria de Status (amostra).
    Anúncio/Status ficam FIXOS à esquerda e Link FIXO à direita (position:sticky
    em .rel-adt), então dão pra ver sem rolar lateralmente — só as métricas do
@@ -746,7 +776,6 @@ function adRowCells(ad,a,struct){
     link:adLinkCell(ad),
     _cpag:s.cpag, _cac:s.cac, status:null};   // valores crus p/ colorir vs meta
 }
-const statusChip=obs=>obs?'<span class="rel-chip c-yellow">Em observação</span>':'<span class="rel-chip c-green">Avaliável</span>';
 function relRenderAdTable(id,list){
   const el=document.getElementById(id); if(!el) return;
   const cols=[
@@ -770,7 +799,7 @@ function relRenderAdTable(id,list){
   const rows=list.map(item=>{
     const cells=adRowCells(item.ad,item.a,item.struct);
     cells.status='';  // placeholder textual; o chip real entra via afterRender
-    return {k:item.ad, cells, _obs:item.obs, _cpag:cells._cpag, _cac:cells._cac};
+    return {k:item.ad, cells, _rec:adRecommendation(item.a), _cpag:cells._cpag, _cac:cells._cac};
   });
   renderTable({
     id, cols, rows, center:true,   // Mar10: só as MÉTRICAS centralizam; dim fica à esquerda (CSS .dt-center)
@@ -783,7 +812,7 @@ function relRenderAdTable(id,list){
         cols.forEach((c,ci)=>{
           if(ci>=tds.length) return;
           const td=tds[ci];
-          if(c.key==='status') td.innerHTML=statusChip(item._obs);
+          if(c.key==='status') td.innerHTML=recChip(item._rec);
           if(c.key==='cpag'){ const mc=metaColorClass(item._cpag,METAS.cpagd); if(mc) td.classList.add(mc); }
           if(c.key==='cac'){ const mc=metaColorClass(item._cac,METAS.cac); if(mc) td.classList.add(mc); }
         });
@@ -881,10 +910,11 @@ function renderRelBrief(){
    usuário edita as metas). Considera todos os leads + gasto do período.
    Mar10: NÃO força um número fixo de linhas preenchendo com anúncios sem
    resultado — mostra TODOS os anúncios com gasto (ordenados: campeões com
-   amostra relevante primeiro, depois pela qualidade). Só os que têm amostra
-   relevante (adSampleOk) recebem o status "Avaliável" (campeão); o resto fica
-   "Em observação" — o pill do título mostra quantos são campeões DE quantos
-   anúncios no total, pra não sugerir que 10 linhas = 10 vencedores. */
+   amostra relevante primeiro, depois pela qualidade). A coluna Status mostra a
+   recomendação (Escalar/Manter/Observar/Cortar, ver adRecommendation) em vez de
+   só "campeão vs. em observação"; o pill do título continua contando quantos
+   têm amostra relevante (adSampleOk) DE quantos anúncios no total, pra não
+   sugerir que 10 linhas = 10 vencedores. */
 function renderRelAds(){
   const fL=leadsActive(), fM=metaActive();
   // Tabela de OTIMIZAÇÃO: vendas datadas pelo CADASTRO do lead (coorte, `dl`), não

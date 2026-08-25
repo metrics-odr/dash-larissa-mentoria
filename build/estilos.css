@@ -289,6 +289,7 @@
   .rel-chip.c-green{color:var(--good); background:color-mix(in srgb,var(--good) 12%,transparent)}
   .rel-chip.c-yellow{color:var(--yellow); background:color-mix(in srgb,var(--yellow) 16%,transparent)}
   .rel-chip.c-red{color:var(--bad); background:color-mix(in srgb,var(--bad) 12%,transparent)}
+  .rel-chip.c-blue{color:var(--accent-blue); background:color-mix(in srgb,var(--accent-blue) 12%,transparent)}
 
   /* painel de Metas & parâmetros (editável) */
   .rel-metas{margin-bottom:14px}

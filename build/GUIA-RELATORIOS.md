@@ -163,12 +163,19 @@ Ao ver um deles ruim, aponte a **etapa** que perdeu eficiência — não recomen
 A aba calcula sozinha, por anúncio (com gasto no período):
 - **Top**: ranqueado pelo **resultado mais profundo disponível** (Venda → Reunião
   Realizada → Agendamento → MQL), maior volume + menor custo, **amostra relevante primeiro**.
-  Anúncio promissor **sem amostra suficiente** entra marcado **"Em observação"** —
-  nunca é "vencedor" só por 1 resultado com pouco gasto.
-- **Piores**: só anúncios com **investimento relevante** e resultado profundo
-  fraco / custo pior que a média; **nunca** por CTR/CPM/CPL isolados. Sem amostra
-  suficiente → **"Em observação"**, não "ruim".
-- Limiares em `build.py`: `SAMPLE_MIN_SPEND`, `SAMPLE_MIN_MQLS`, `TOP_ADS_N`.
+- A coluna **Status** mostra a recomendação **Escalar / Manter / Observar / Cortar**
+  (`adRecommendation` em `app.js`), não mais "Avaliável/Em observação": meta principal é
+  **CAC** vs. a meta do painel, mas só vira **Escalar** com Faturamento provado (venda com
+  valor) **e** CPAG dentro da meta — CAC bom sozinho não escala. CAC acima do teto (+30%
+  da meta) → **Cortar**; CAC na faixa intermediária, ou CAC bom sem faturamento/com CPAG
+  estourado → **Manter**. Sem venda ainda, julga só pelo CPAG (verde → Manter, vermelho →
+  Cortar). **Sem amostra mínima** (`SAMPLE_MIN_SPEND`/volume mínimo do painel) ou sem meta
+  definida pra julgar → **Observar**, nunca "vencedor"/"ruim" no escuro.
+- **Piores**: mesma tabela, ordenada — só anúncios com **investimento relevante** e
+  resultado profundo fraco / custo pior que a média aparecem como candidatos a Cortar;
+  **nunca** por CTR/CPM/CPL isolados.
+- Limiares em `build.py`: `SAMPLE_MIN_SPEND`, `SAMPLE_MIN_MQLS`, `TOP_ADS_N`; metas de
+  CAC/CPAG vêm do painel editável da aba Relatório (`METAS` em `app.js`).
 - **Link** abre o criativo (coluna opcional de permalink na aba de mídia →
   `ad_links`).
 
