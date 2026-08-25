@@ -681,28 +681,6 @@ function metaColorClass(v, meta){
 
 function adLinkCell(name){ const u=AD_LINKS[name];
   return u?`<a class="rel-adlink" href="${escHtml(u)}" target="_blank" rel="noopener">Abrir ▸</a>`:'<span class="rel-adlink off">—</span>'; }
-
-/* ad -> (campanha, conjunto) dominantes por gasto no Meta (fallback: lead).
-   Um anúncio pode rodar em mais de uma campanha/conjunto; fica com a combinação
-   de maior gasto. */
-function adStructMap(fM,fL){
-  const acc={};
-  fM.forEach(r=>{ const byCamp=acc[r.ad]=acc[r.ad]||{};
-    const byAdset=byCamp[r.camp]=byCamp[r.camp]||{};
-    byAdset[r.adset]=(byAdset[r.adset]||0)+r.sp; });
-  const out={};
-  Object.entries(acc).forEach(([ad,byCamp])=>{
-    let best=null;
-    Object.entries(byCamp).forEach(([camp,byAdset])=>{
-      Object.entries(byAdset).forEach(([adset,sp])=>{
-        if(!best||sp>best.sp) best={camp,adset,sp};
-      });
-    });
-    out[ad]={camp:best.camp,adset:best.adset};
-  });
-  fL.forEach(r=>{ if(!out[r.ad]) out[r.ad]={camp:r.camp,adset:r.adset}; });
-  return out;
-}
 /* amostra relevante para JULGAR o anúncio (senão: "Em observação"). O limiar de
    MQLs vem do painel de metas (volume mínimo amostral), editável ao vivo. */
 function adSampleOk(a){ return a.sp>=SAMPLE_MIN_SPEND && a.mqls>=METAS.volMin; }
@@ -721,6 +699,36 @@ function cmpBest(a,b){ const qa=adQuality(a), qb=adQuality(b);   // <0 => a ante
   if(qa.vol!==qb.vol)   return qb.vol-qa.vol;
   return qa.cost-qb.cost; }
 
+/* Recomendação (Escalar/Manter/Observar/Cortar) pro Status da tabela. Meta
+   principal é CAC, mas CAC bom não escala sozinho: só "Escalar" com Faturamento
+   provado (venda com valor) E CPAG dentro da meta (não pode ter custo de
+   agendamento alto escondido atrás de um CAC ok). Sem amostra mínima ou sem
+   meta definida pra julgar, cai em "Observar" — nunca escala/corta no escuro. */
+function adRecommendation(a){
+  if(!adSampleOk(a)) return 'observar';
+  const s=salesOf(a);
+  const cacClass=metaColorClass(s.cac, METAS.cac);
+  const cpagClass=metaColorClass(s.cpag, METAS.cpagd);
+  const hasFat=s.fat!=null && s.fat>0;
+  if(s.cac!=null){                      // já tem venda(s) atribuída(s): CAC manda
+    if(cacClass==='mc-red') return 'cortar';
+    if(cacClass==='mc-yellow') return 'manter';
+    // CAC bom (ou meta de CAC não definida) — só escala com Faturamento provado
+    // e sem CPAG estourado; senão segura (não escala às cegas).
+    if(hasFat && cpagClass!=='mc-red') return 'escalar';
+    return 'manter';
+  }
+  if(s.agendamentos!=null){             // ainda sem venda: julga só pelo CPAG
+    if(cpagClass==='mc-red') return 'cortar';
+    if(cpagClass==='mc-green') return 'manter';   // não escala sem CAC provado
+    return 'observar';
+  }
+  return 'observar';                    // só MQL/lead: fundo de funil raso demais p/ decidir
+}
+const REC_LABEL={escalar:'Escalar',manter:'Manter',observar:'Observar',cortar:'Cortar'};
+const REC_CLASS={escalar:'c-green',manter:'c-blue',observar:'c-yellow',cortar:'c-red'};
+const recChip=rec=>`<span class="rel-chip ${REC_CLASS[rec]}">${REC_LABEL[rec]}</span>`;
+
 /* 22 colunas pedidas pelo cliente + coluna própria de Status (amostra).
    Anúncio/Status ficam FIXOS à esquerda e Link FIXO à direita (position:sticky
    em .rel-adt), então dão pra ver sem rolar lateralmente — só as métricas do
@@ -731,7 +739,7 @@ const AD_COLS=[
   {k:'gasto',label:'Gasto'},{k:'im',label:'Impr.'},{k:'cpm',label:'CPM'},{k:'ctr',label:'CTR'},
   {k:'leads',label:'Leads'},{k:'cpl',label:'CPL'},{k:'mqls',label:'MQLs'},{k:'tx',label:'Tx‑MQL'},{k:'cpmql',label:'CPMQL'},
   {k:'agendamentos',label:'Agendamentos'},{k:'txag',label:'Tx‑Agend.'},{k:'cpag',label:'CPAG'},
-  {k:'reunioes',label:'Reuniões'},{k:'noshow',label:'No‑Show'},{k:'cprr',label:'CPRR'},
+  {k:'convagd',label:'ConvAGD'},
   {k:'vendas',label:'Vendas'},{k:'cac',label:'CAC'},{k:'fat',label:'Faturamento'},{k:'roas',label:'ROAS'},
   {k:'link',label:'Link',dim:true,stk:'r'},
 ];
@@ -741,12 +749,11 @@ function adRowCells(ad,a,struct){
     gasto:d.gasto, im:a.im, cpm:d.cpm, ctr:d.ctr,
     leads:a.leads, cpl:d.cpl, mqls:a.mqls, tx:d.tx, cpmql:d.cpmql,
     agendamentos:s.agendamentos, txag:s.txag, cpag:s.cpag,
-    reunioes:s.reunioes, noshow:s.txnoshow, cprr:s.cprr,
+    convagd:s.convagd,
     vendas:s.vendas, cac:s.cac, fat:s.fat, roas:s.roas,
     link:adLinkCell(ad),
     _cpag:s.cpag, _cac:s.cac, status:null};   // valores crus p/ colorir vs meta
 }
-const statusChip=obs=>obs?'<span class="rel-chip c-yellow">Em observação</span>':'<span class="rel-chip c-green">Avaliável</span>';
 function relRenderAdTable(id,list){
   const el=document.getElementById(id); if(!el) return;
   const cols=[
@@ -760,9 +767,7 @@ function relRenderAdTable(id,list){
     {key:'agendamentos',label:'Agendamentos',type:'int'},
     {key:'txag',label:'Tx‑Agend.',type:'pct'},
     {key:'cpag',label:'CPAG',type:'brl'},
-    {key:'reunioes',label:'Reuniões',type:'int'},
-    {key:'noshow',label:'No‑Show',type:'pct'},
-    {key:'cprr',label:'CPRR',type:'brl'},
+    {key:'convagd',label:'ConvAGD',type:'pct'},
     {key:'vendas',label:'Vendas',type:'int'},
     {key:'cac',label:'CAC',type:'brl'},
     {key:'fat',label:'Faturamento',type:'brl'},
@@ -772,7 +777,7 @@ function relRenderAdTable(id,list){
   const rows=list.map(item=>{
     const cells=adRowCells(item.ad,item.a,item.struct);
     cells.status='';  // placeholder textual; o chip real entra via afterRender
-    return {k:item.ad, cells, _obs:item.obs, _cpag:cells._cpag, _cac:cells._cac};
+    return {k:item.key||item.ad, cells, _rec:adRecommendation(item.a), _cpag:cells._cpag, _cac:cells._cac};
   });
   renderTable({
     id, cols, rows, center:true,   // Mar10: só as MÉTRICAS centralizam; dim fica à esquerda (CSS .dt-center)
@@ -785,7 +790,7 @@ function relRenderAdTable(id,list){
         cols.forEach((c,ci)=>{
           if(ci>=tds.length) return;
           const td=tds[ci];
-          if(c.key==='status') td.innerHTML=statusChip(item._obs);
+          if(c.key==='status') td.innerHTML=recChip(item._rec);
           if(c.key==='cpag'){ const mc=metaColorClass(item._cpag,METAS.cpagd); if(mc) td.classList.add(mc); }
           if(c.key==='cac'){ const mc=metaColorClass(item._cac,METAS.cac); if(mc) td.classList.add(mc); }
         });
@@ -883,19 +888,32 @@ function renderRelBrief(){
    usuário edita as metas). Considera todos os leads + gasto do período.
    Mar10: NÃO força um número fixo de linhas preenchendo com anúncios sem
    resultado — mostra TODOS os anúncios com gasto (ordenados: campeões com
-   amostra relevante primeiro, depois pela qualidade). Só os que têm amostra
-   relevante (adSampleOk) recebem o status "Avaliável" (campeão); o resto fica
-   "Em observação" — o pill do título mostra quantos são campeões DE quantos
-   anúncios no total, pra não sugerir que 10 linhas = 10 vencedores. */
+   amostra relevante primeiro, depois pela qualidade). A coluna Status mostra a
+   recomendação (Escalar/Manter/Observar/Cortar, ver adRecommendation) em vez de
+   só "campeão vs. em observação"; o pill do título continua contando quantos
+   têm amostra relevante (adSampleOk) DE quantos anúncios no total, pra não
+   sugerir que 10 linhas = 10 vencedores. */
+/* chave composta campanha+conjunto+anúncio: o MESMO nome de anúncio pode rodar
+   em várias campanhas/conjuntos (reaproveitado em testes/estruturas diferentes)
+   — cada estrutura vira sua PRÓPRIA linha na tabela, com o gasto/resultado só
+   dela. Sem isso a tabela somava tudo debaixo do nome do anúncio e rotulava a
+   linha só com a estrutura de MAIOR gasto, escondendo as outras (inclusive uma
+   que estivesse indo bem sozinha). '' não aparece em nome de campanha/
+   conjunto/anúncio real, então é seguro como separador. */
+const SEP='';
+const structKey=r=>(r.camp||'—')+SEP+(r.adset||'—')+SEP+(r.ad||'—');
 function renderRelAds(){
-  const fL=leadsActive(), fM=metaActive();
+  const fL=leadsActive().map(r=>({...r, _k:structKey(r)}));
+  const fM=metaActive().map(r=>({...r, _k:structKey(r)}));
   // Tabela de OTIMIZAÇÃO: vendas datadas pelo CADASTRO do lead (coorte, `dl`), não
   // pela data da venda — o ranking e o CAC/ROAS de cada anúncio precisam bater com
   // o gasto que gerou aquele lead. Demais visões da aba seguem na data da venda.
-  const fS=salesCohort().filter(s=>s.attributed);   // vendas de tráfego pago, por anúncio
-  const struct=adStructMap(fM,fL);
-  const agg=buildAgg(fL,fM,fS,'ad');
-  const pool=Object.entries(agg).filter(([ad,a])=>a.sp>0).map(([ad,a])=>({ad, a, struct:struct[ad]||{camp:'—',adset:'—'}}));
+  const fS=salesCohort().filter(s=>s.attributed).map(r=>({...r, _k:structKey(r)}));   // vendas de tráfego pago, por estrutura
+  const agg=buildAgg(fL,fM,fS,'_k');
+  const pool=Object.entries(agg).filter(([k,a])=>a.sp>0).map(([k,a])=>{
+    const [camp,adset,ad]=k.split(SEP);
+    return {ad, a, struct:{camp,adset}, key:k};
+  });
 
   const all=pool.slice().sort((x,y)=>{ const sx=adSampleOk(x.a), sy=adSampleOk(y.a);
     if(sx!==sy) return sx?-1:1; return cmpBest(x.a,y.a); })
@@ -904,7 +922,7 @@ function renderRelAds(){
 
   relRenderAdTable('relTop',all);
   document.getElementById('relTopCount').textContent =
-    champs+' '+(champs===1?'campeão':'campeões')+' de '+all.length+' anúncio'+(all.length===1?'':'s')+' com gasto';
+    champs+' '+(champs===1?'campeão':'campeões')+' de '+all.length+' estrutura'+(all.length===1?'':'s')+' (campanha·conjunto·anúncio) com gasto';
 }
 
 /* nota de referência do painel de metas (mostra as metas ativas + legenda de cor) */
