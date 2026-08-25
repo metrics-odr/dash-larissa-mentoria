@@ -29,7 +29,7 @@ const STATE = {
   page:'geral', from:B.date_min, to:B.date_max, preset:'todo', tax:true,
   selDays:new Set(),
   mSelC:new Set(), mSelA:new Set(), mSelAd:new Set(),
-  filterFunil:'', filterTemp:'',
+  filterFunil:'', filterTemp:'', filterAdStatus:'',
   sort:{}, colw: JSON.parse(localStorage.getItem('dm_colw')||'{}'),
   // granularidade por gráfico temporal (default diário; "Vendas & receita" mensal)
   gran:{ gVendas:'month', mVendas:'month', rVendas:'month' },
@@ -757,7 +757,7 @@ function adRowCells(ad,a,struct){
 function relRenderAdTable(id,list){
   const el=document.getElementById(id); if(!el) return;
   const cols=[
-    {key:'ad',label:'Anúncio',type:'dim',big:true,stk:'l1'},{key:'status',label:'Status',type:'dim',w:140},
+    {key:'ad',label:'Anúncio',type:'dim',big:true,stk:'l1'},{key:'status',label:'Status',type:'dim',w:140,stk:'l2'},
     {key:'camp',label:'Campanha',type:'dim',big:true},{key:'adset',label:'Conjunto',type:'dim',big:true},
     {key:'gasto',label:'Gasto',type:'brl'},{key:'im',label:'Impr.',type:'int'},
     {key:'cpm',label:'CPM',type:'brl'},{key:'ctr',label:'CTR',type:'pct'},
@@ -776,8 +776,9 @@ function relRenderAdTable(id,list){
   ];
   const rows=list.map(item=>{
     const cells=adRowCells(item.ad,item.a,item.struct);
-    cells.status='';  // placeholder textual; o chip real entra via afterRender
-    return {k:item.key||item.ad, cells, _rec:adRecommendation(item.a), _cpag:cells._cpag, _cac:cells._cac};
+    const rec=adRecommendation(item.a);
+    cells.status=REC_LABEL[rec];  // valor ordenável (texto); o chip visual entra via afterRender
+    return {k:item.key||item.ad, cells, _rec:rec, _cpag:cells._cpag, _cac:cells._cac};
   });
   renderTable({
     id, cols, rows, center:true,   // Mar10: só as MÉTRICAS centralizam; dim fica à esquerda (CSS .dt-center)
@@ -920,9 +921,11 @@ function renderRelAds(){
     .map(it=>({...it, obs:!adSampleOk(it.a)}));
   const champs=all.filter(it=>!it.obs).length;
 
-  relRenderAdTable('relTop',all);
+  const shown = STATE.filterAdStatus ? all.filter(it=>adRecommendation(it.a)===STATE.filterAdStatus) : all;
+  relRenderAdTable('relTop',shown);
   document.getElementById('relTopCount').textContent =
-    champs+' '+(champs===1?'campeão':'campeões')+' de '+all.length+' estrutura'+(all.length===1?'':'s')+' (campanha·conjunto·anúncio) com gasto';
+    champs+' '+(champs===1?'campeão':'campeões')+' de '+all.length+' estrutura'+(all.length===1?'':'s')+' (campanha·conjunto·anúncio) com gasto'
+    +(STATE.filterAdStatus?' · filtro: '+REC_LABEL[STATE.filterAdStatus]+' ('+shown.length+')':'');
 }
 
 /* nota de referência do painel de metas (mostra as metas ativas + legenda de cor) */
@@ -1217,6 +1220,9 @@ function syncFunilFilters(){ CSELS.forEach(c=>c.sync()); }
   buildCsel('cselTemp',
     [{v:'',label:'Todas as temperaturas'},{v:'Quente',label:'Quente'},{v:'Frio',label:'Frio'}],
     ()=>STATE.filterTemp, v=>STATE.filterTemp=v);
+  buildCsel('cselAdStatus',
+    [{v:'',label:'Todos os status'}].concat(Object.keys(REC_LABEL).map(k=>({v:k,label:REC_LABEL[k]}))),
+    ()=>STATE.filterAdStatus, v=>STATE.filterAdStatus=v);
 })();
 document.addEventListener('click',()=>{ CSELS.forEach(c=>{ c.pop.hidden=true; c.host.classList.remove('open'); }); });
 document.getElementById('refreshBtn').addEventListener('click',function(){ this.classList.add('loading'); location.href=location.pathname+'?t='+Date.now()+location.hash; });

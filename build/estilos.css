@@ -319,11 +319,26 @@
      sem precisar rolar — só as colunas do meio rolam lateralmente (dentro da
      própria tabela, nunca a página). */
   table.dt.rel-adt tbody tr{cursor:default}
-  table.dt.rel-adt .stk-l1, table.dt.rel-adt .stk-r{position:sticky; z-index:1; background:var(--surface)}
-  table.dt.rel-adt thead .stk-l1, table.dt.rel-adt thead .stk-r{z-index:3; background:var(--thead)}
-  table.dt.rel-adt tfoot .stk-l1, table.dt.rel-adt tfoot .stk-r{position:sticky; z-index:1; background:var(--tfoot)}
-  table.dt.rel-adt .stk-l1{left:0; border-right:1px solid var(--border)}
+  table.dt.rel-adt .stk-l1, table.dt.rel-adt .stk-l2, table.dt.rel-adt .stk-r{position:sticky; z-index:1; background:var(--surface)}
+  table.dt.rel-adt thead .stk-l1, table.dt.rel-adt thead .stk-l2, table.dt.rel-adt thead .stk-r{z-index:3; background:var(--thead)}
+  table.dt.rel-adt tfoot .stk-l1, table.dt.rel-adt tfoot .stk-l2, table.dt.rel-adt tfoot .stk-r{position:sticky; z-index:1; background:var(--tfoot)}
+  table.dt.rel-adt tbody tr:hover .stk-l1, table.dt.rel-adt tbody tr:hover .stk-l2{background:var(--accent-blue-light)}
+  table.dt.rel-adt .stk-l1{left:0}
+  table.dt.rel-adt .stk-l2{border-right:1px solid var(--border)}
   table.dt.rel-adt .stk-r{right:0; border-left:1px solid var(--border)}
+  /* filtro de status acima da tabela Top Anúncios — mesma identidade visual do
+     csel da sidebar (Funil/Temperatura), largura contida (não ocupa a linha
+     toda) e já theme-aware (usa as mesmas var(--ctl-*) do csel). */
+  .rel-filter-row{display:flex; align-items:center; gap:10px; margin:10px 0 12px}
+  .rel-filter-lbl{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; font-weight:600}
+  /* mesmo componente .csel do filtro de Funil/Temperatura (sidebar), mas aqui
+     fica no corpo da página — por isso remapeia os tokens --ctl-* (sempre
+     escuros, de propósito, na sidebar) para os tokens normais de tema, que
+     alternam com o toggle claro/escuro. */
+  .rel-filter-row .csel{width:220px; flex:0 0 auto;
+    --ctl-bg:var(--surface); --ctl-elev:var(--surface); --ctl-ink:var(--ink); --ctl-muted:var(--muted);
+    --ctl-border:var(--border); --ctl-hover:var(--accent-blue-light); --ctl-accent:var(--accent-blue)}
+  .rel-filter-row .csel-pop{box-shadow:0 12px 34px rgba(0,0,0,.18)}
   .rel-adlink{font-size:12px; font-weight:600; color:var(--accent-blue); text-decoration:none; white-space:nowrap}
   .rel-adlink:hover{text-decoration:underline}
   .rel-adlink.off{color:var(--muted); font-weight:400}
