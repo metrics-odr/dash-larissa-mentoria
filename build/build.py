@@ -32,7 +32,9 @@ import json
 import os
 import re
 import sys
+import time
 import unicodedata
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone, timedelta
 
@@ -79,11 +81,25 @@ N_DIAS_CORTE = 5           # dias consecutivos acima do teto p/ considerar corte
 # --------------------------------------------------------------------------- #
 # Leitura
 # --------------------------------------------------------------------------- #
+FETCH_RETRIES = 3       # tentativas totais em caso de timeout/erro de rede no export CSV
+FETCH_RETRY_DELAY = 15  # segundos entre tentativas (o Google Sheets às vezes trava a resposta)
+
+
 def fetch_csv(url: str) -> list[list[str]]:
     req = urllib.request.Request(url, headers={"User-Agent": "dash-template-bot/1.0"})
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        raw = resp.read().decode("utf-8", errors="replace")
-    return list(csv.reader(io.StringIO(raw)))
+    last_err: Exception | None = None
+    for attempt in range(1, FETCH_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+            return list(csv.reader(io.StringIO(raw)))
+        except (TimeoutError, urllib.error.URLError) as exc:
+            last_err = exc
+            if attempt < FETCH_RETRIES:
+                print(f"[fetch_csv] tentativa {attempt}/{FETCH_RETRIES} falhou ({exc!r}); "
+                      f"tentando de novo em {FETCH_RETRY_DELAY}s...", file=sys.stderr)
+                time.sleep(FETCH_RETRY_DELAY)
+    raise last_err
 
 
 def read_csv_file(path: str) -> list[list[str]]:
