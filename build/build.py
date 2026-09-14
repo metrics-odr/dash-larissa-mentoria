@@ -343,8 +343,8 @@ def build_sales(leads: list, sales_rows: list) -> list:
         sheader,
         {"date": ["data_envio", "data formatada", "data"], "email": ["email"], "phone": ["telefone"],
          "caixa": ["caixavenda"], "fat": ["faturamentovenda"], "contr": ["contratante"],
-         "renov": ["renovacao", "renovação"]},
-        {"date": 0, "email": 4, "phone": 9, "caixa": 10, "fat": 11, "contr": None, "renov": None},
+         "renov": ["renovacao", "renovação"], "sala": ["sala secreta"]},
+        {"date": 0, "email": 4, "phone": 9, "caixa": 10, "fat": 11, "contr": None, "renov": None, "sala": None},
     )
     def older(idx_a, idx_b):  # -> índice do lead com created mais antigo (None-safe)
         da, db = leads[idx_a]["d"] or "9999", leads[idx_b]["d"] or "9999"
@@ -394,11 +394,23 @@ def build_sales(leads: list, sales_rows: list) -> list:
         v = norm(cell(row, renov_i))
         return v in ("true", "sim", "1", "verdadeiro", "x", "✅") or "✅" in cell(row, renov_i)
 
+    sala_i = sidx.get("sala")
+
+    def is_sala_secreta(row):
+        """Coluna SALA SECRETA (checkbox): TRUE/✅/Sim/1 = venda fechada pela
+        Sala Secreta — descartada do dashboard (pedido do cliente)."""
+        if sala_i is None:
+            return False
+        v = norm(cell(row, sala_i))
+        return v in ("true", "sim", "1", "verdadeiro", "x", "✅") or "✅" in cell(row, sala_i)
+
     out: list = []
     for row in sales_rows[1:]:
         if not any((c or "").strip() for c in row):
             continue
         if not is_signed(row):   # só vendas efetivamente assinadas
+            continue
+        if is_sala_secreta(row):  # descarta vendas da Sala Secreta
             continue
         email = norm(cell(row, sidx["email"]))
         phone = phone_digits(cell(row, sidx["phone"]))
