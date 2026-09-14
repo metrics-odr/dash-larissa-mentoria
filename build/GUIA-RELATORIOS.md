@@ -86,7 +86,8 @@ Impressões → Cliques/abertura do formulário → Leads → MQLs (Score 10 ou 
 
 - **MQL** = coluna "Qualificação" == "QLF" **ou** coluna "score" == 10 (aba
   Leads) — ver `build.py` → `is_qualified`.
-- **Agendamento** = coluna "Status da resposta" == "scheduled" (aba Leads).
+- **Agendamento** = coluna "Status da resposta" == "scheduled" **e** o lead é
+  MQL (QLF/score 10) — agendamento de lead não-qualificado não conta.
 - **Reunião Realizada** = ainda não tem fonte própria na planilha (aparece
   como "-"); "Venda" já é o resultado mais profundo disponível hoje.
 - **Venda/Faturamento/Receita (Caixa)** = aba Compradores, cruzada por e-mail
