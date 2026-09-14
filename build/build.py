@@ -525,6 +525,7 @@ def process(leads_rows, meta_rows, sales_rows=None):
         raw_email = norm(cell(row, lidx["email"]))
         raw_phone = phone_digits(cell(row, lidx["phone"]))
         leadscore = coalesce(row, IDX_LEADSCORE).strip().upper()[:1] or "—"
+        qualified = is_qualified(cell(row, lidx["qlf"]), cell(row, lidx["score"]))
         leads.append({
             "d": parse_date(cell(row, lidx["created"])),
             "src": src,
@@ -543,14 +544,16 @@ def process(leads_rows, meta_rows, sales_rows=None):
             "investir": clean_txt(coalesce(row, IDX_INVESTIR)),
             "retorno": clean_txt(coalesce(row, IDX_RETORNO)),
             "leadscore": leadscore,
-            "q": 1 if is_qualified(cell(row, lidx["qlf"]), cell(row, lidx["score"])) else 0,
+            "q": 1 if qualified else 0,
             "utm": 1 if valid_utm(campaign) else 0,
             "nm": first_last_initial(cell(row, lidx["name"])),
             "em": mask_email(cell(row, lidx["email"])),
             "ph": mask_phone(cell(row, lidx["phone"])),
             "funil": funil,
             "temp": classify_temp(campaign),
-            "agd": 1 if norm(cell(row, lidx["status"])) == "scheduled" else 0,
+            # Só conta como Agendamento se o lead também for Qualificado (QLF/score 10) —
+            # agendamento de lead não-QLF não deve inflar o funil.
+            "agd": 1 if (qualified and norm(cell(row, lidx["status"])) == "scheduled") else 0,
             "_email": raw_email, "_phone": raw_phone,  # só para build_sales(); removidos antes do JSON final
         })
 
