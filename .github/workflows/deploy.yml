@@ -21,14 +21,19 @@ permissions:
   pages: write
   id-token: write
 
-# Nunca roda dois deploys ao mesmo tempo; nao cancela um deploy em andamento
+# Nunca roda dois deploys ao mesmo tempo. cancel-in-progress=true: um run
+# travado/antigo (ex.: "waiting" no environment) NAO bloqueia mais os proximos —
+# o build mais novo sempre tem os dados mais frescos e substitui o anterior.
+# (Antes era false: um run preso segurava o grupo e todos os disparos horarios
+# do cron-job.org eram cancelados sem publicar nada.)
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
