@@ -321,7 +321,7 @@ function renderTable(cfg){
    só a OPACIDADE varia com o valor (maior valor = mais vibrante). */
 const HEAT_HUE={gasto:'--heat-gasto', leads:'--heat-leads', mqls:'--heat-mqls',
   cpl:'--heat-cpl', cpmql:'--heat-cpmql', cpag:'--heat-cpag', vendas:'--heat-vendas',
-  rec:'--heat-rec', fat:'--heat-rec'};
+  rec:'--heat-rec', fat:'--heat-rec', tm:'--heat-tm', roas:'--heat-roas'};
 function heat(v,lo,hi,kind){
   if(v==null||!isFinite(v)||hi===lo||!HEAT_HUE[kind]) return 'transparent';
   const t=Math.max(0,Math.min(1,(v-lo)/(hi-lo)));
@@ -759,19 +759,19 @@ function relRenderAdTable(id,list){
   const cols=[
     {key:'ad',label:'Anúncio',type:'dim',big:true,stk:'l1'},{key:'status',label:'Status',type:'dim',w:140,stk:'l2'},
     {key:'camp',label:'Campanha',type:'dim',big:true},{key:'adset',label:'Conjunto',type:'dim',big:true},
-    {key:'gasto',label:'Gasto',type:'brl'},{key:'im',label:'Impr.',type:'int'},
+    {key:'gasto',label:'Gasto',type:'brl',heat:'gasto'},{key:'im',label:'Impr.',type:'int'},
     {key:'cpm',label:'CPM',type:'brl'},{key:'ctr',label:'CTR',type:'pct'},
-    {key:'leads',label:'Leads',type:'int'},{key:'cpl',label:'CPL',type:'brl'},
+    {key:'leads',label:'Leads',type:'int'},{key:'cpl',label:'CPL',type:'brl',heat:'cpl'},
     {key:'mqls',label:'MQLs',type:'int'},{key:'tx',label:'Tx‑MQL',type:'pct'},
-    {key:'cpmql',label:'CPMQL',type:'brl'},
+    {key:'cpmql',label:'CPMQL',type:'brl',heat:'cpmql'},
     {key:'agendamentos',label:'Agendamentos',type:'int'},
     {key:'txag',label:'Tx‑Agend.',type:'pct'},
-    {key:'cpag',label:'CPAG',type:'brl'},
+    {key:'cpag',label:'CPAG',type:'brl',heat:'cpag'},
     {key:'convagd',label:'ConvAGD',type:'pct'},
     {key:'vendas',label:'Vendas',type:'int'},
     {key:'cac',label:'CAC',type:'brl'},
     {key:'fat',label:'Faturamento',type:'brl'},
-    {key:'roas',label:'ROAS',type:'num'},
+    {key:'roas',label:'ROAS',type:'num',heat:'roas'},
     {key:'link',label:'Link',type:'html',w:90,stk:'r'},
   ];
   const rows=list.map(item=>{
@@ -970,8 +970,8 @@ const DAILY_COLS=[
   {key:'txag',label:'Tx‑AGD',type:'pct'},{key:'agd',label:'AGDs',type:'int'},{key:'cpag',label:'CPAGD',type:'brl',heat:'cpag'},
   {key:'convagd',label:'ConvAGD',type:'pct'},
   {key:'vendas',label:'Vendas',type:'int',heat:'vendas'},{key:'cac',label:'CAC',type:'brl'},
-  {key:'caixa',label:'Rec.',type:'brl',heat:'rec'},{key:'roascx',label:'ROAS‑R',type:'num'},
-  {key:'fat',label:'Fat.',type:'brl',heat:'fat'},{key:'roas',label:'ROAS‑F',type:'num'},
+  {key:'caixa',label:'Rec.',type:'brl',heat:'rec'},{key:'roascx',label:'ROAS‑R',type:'num',heat:'roas'},
+  {key:'fat',label:'Fat.',type:'brl',heat:'fat'},{key:'roas',label:'ROAS‑F',type:'num',heat:'roas'},
 ];
 function dailyCells(x,d,isTotal){
   const s=salesOf(x);
@@ -1024,14 +1024,14 @@ function renderMeta(){
   // hierarquia — cada tabela vem do escopo que exclui a PRÓPRIA dimensão,
   // então todas as linhas irmãs continuam visíveis para multi-seleção (Ctrl).
   const hcols=[
-    {key:'dim',label:'',type:'dim',big:true,stk:'l1'},{key:'gasto',label:'Gasto',type:'brl',stk:'l2'},{key:'cpm',label:'CPM',type:'brl'},
+    {key:'dim',label:'',type:'dim',big:true,stk:'l1'},{key:'gasto',label:'Gasto',type:'brl',stk:'l2',heat:'gasto'},{key:'cpm',label:'CPM',type:'brl'},
     {key:'ctr',label:'CTR',type:'pct'},{key:'cr',label:'CR',type:'pct'},{key:'convlp',label:'ConvLP',type:'pct'},
-    {key:'leads',label:'Leads',type:'int'},{key:'cpl',label:'CPL',type:'brl'},
-    {key:'tx',label:'Tx‑MQL',type:'pct'},{key:'mqls',label:'MQLs',type:'int'},{key:'cpmql',label:'CPMQL',type:'brl'},
-    {key:'agd',label:'AGDs',type:'int'},{key:'txag',label:'Tx‑AGD',type:'pct'},{key:'cpag',label:'CPAGD',type:'brl'},
+    {key:'leads',label:'Leads',type:'int'},{key:'cpl',label:'CPL',type:'brl',heat:'cpl'},
+    {key:'tx',label:'Tx‑MQL',type:'pct'},{key:'mqls',label:'MQLs',type:'int'},{key:'cpmql',label:'CPMQL',type:'brl',heat:'cpmql'},
+    {key:'agd',label:'AGDs',type:'int'},{key:'txag',label:'Tx‑AGD',type:'pct'},{key:'cpag',label:'CPAGD',type:'brl',heat:'cpag'},
     {key:'convagd',label:'ConvAGD',type:'pct'},{key:'vendas',label:'Vendas',type:'int'},{key:'cac',label:'CAC',type:'brl'},
-    {key:'fat',label:'Fat.',type:'brl'},{key:'tm',label:'TM',type:'brl'},{key:'roas',label:'ROAS',type:'num'},
-    {key:'caixa',label:'Receita',type:'brl'},{key:'roascx',label:'ROAS (C)',type:'num'},
+    {key:'fat',label:'Fat.',type:'brl'},{key:'tm',label:'TM',type:'brl',heat:'tm'},{key:'roas',label:'ROAS',type:'num',heat:'roas'},
+    {key:'caixa',label:'Receita',type:'brl'},{key:'roascx',label:'ROAS (C)',type:'num',heat:'roas'},
   ];
   function hierRows(map){ return Object.entries(map).map(([k,a])=>{const d=derive(a),s=salesOf(a);
     return {k, cells:{dim:k,gasto:d.gasto,cpm:d.cpm,ctr:d.ctr,cr:d.cr,convlp:d.convlp,leads:a.leads,cpl:d.cpl,tx:d.tx,mqls:a.mqls,cpmql:d.cpmql,
