@@ -251,7 +251,12 @@ function renderTable(cfg){
     const sel = cfg.selectable && cfg.selSet && cfg.selSet.has(r.k);
     const tds=cfg.cols.map(c=>{
       const v=r.cells[c.key]; let bg='';
-      if(c.heat && ext[c.key]) bg=`background:${heat(v,ext[c.key][0],ext[c.key][1],c.heat)}`;
+      if(c.heat && ext[c.key]){
+        const hc=heat(v,ext[c.key][0],ext[c.key][1],c.heat);
+        // colunas fixas (sticky): o heatmap vai por cima do fundo OPACO da célula
+        // (background-image), senão o conteúdo que rola por baixo aparece através.
+        bg = c.stk ? `background-image:linear-gradient(${hc},${hc})` : `background:${hc}`;
+      }
       const cls=(c.type==='dim'?'dim':'')+(c.cls&&c.cls(r)?' '+c.cls(r):'')+stkCls(c);
       const ttl=c.type==='html'?'':` title="${esc(fmtStd(c.type,v))}"`;
       return `<td class="${cls}" style="${bg}"${ttl}>${fmt(c.type,v)}</td>`;
@@ -1049,11 +1054,11 @@ function renderMeta(){
   // Tabelas hierárquicas: NÃO usam "fit" — a dimensão (campanha/conjunto/anúncio)
   // tem largura automática p/ caber o nome INTEIRO por padrão, nunca quebra linha,
   // é redimensionável (arrastar borda) e 2 cliques na borda auto-ajusta (Sheets/Looker).
-  renderTable({id:'tCamp', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Campanha'}:c), rows:hierRows(aggC), total:totRowOf(totals(Sc.fL,Sc.fM,Sc.fSc)),
+  renderTable({id:'tCamp', stick:true, center:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Campanha'}:c), rows:hierRows(aggC), total:totRowOf(totals(Sc.fL,Sc.fM,Sc.fSc)),
     selectable:true, selSet:STATE.mSelC, onSelect:(k,e)=>selDim('C',k,e&&(e.ctrlKey||e.metaKey))});
-  renderTable({id:'tAdset', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Conjunto',big:true}:c), rows:hierRows(aggA), total:totRowOf(totals(Sa.fL,Sa.fM,Sa.fSc)),
+  renderTable({id:'tAdset', stick:true, center:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Conjunto',big:true}:c), rows:hierRows(aggA), total:totRowOf(totals(Sa.fL,Sa.fM,Sa.fSc)),
     selectable:true, selSet:STATE.mSelA, onSelect:(k,e)=>selDim('A',k,e&&(e.ctrlKey||e.metaKey))});
-  renderTable({id:'tAd', stick:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Anúncio'}:c), rows:hierRows(aggD), total:totRowOf(totals(Sd.fL,Sd.fM,Sd.fSc)),
+  renderTable({id:'tAd', stick:true, center:true, cols:hcols.map((c,i)=>i===0?{...c,label:'Anúncio'}:c), rows:hierRows(aggD), total:totRowOf(totals(Sd.fL,Sd.fM,Sd.fSc)),
     selectable:true, selSet:STATE.mSelAd, onSelect:(k,e)=>selDim('D',k,e&&(e.ctrlKey||e.metaKey))});
 
   // Mar03/Mar10: cada gráfico varia a dimensão da sua tabela — MQLs por dia, 1 linha

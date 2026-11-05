@@ -333,4 +333,7 @@ MQLs (verde)** — cores em `--heat-gasto/leads/mqls`. As demais colunas ficam s
    gerar um novo** (fine‑grained, só Actions: read/write neste repo).
 
 ## Branch / git
-- `claude/mednexus-paid-traffic-dashboard-kxibmc`; manter sincronizada com `main`.
+- **REGRA: trabalhar SEMPRE direto na `main`.** Toda alteração deve acabar na `main`
+  (o deploy/Pages e o cron-job.org só enxergam a `main`). Se a sessão for criada numa
+  branch de trabalho, abra o PR e **mescle-o na `main` ao terminar**, sem esperar
+  novo pedido. Autorizado pelo dono do projeto.
