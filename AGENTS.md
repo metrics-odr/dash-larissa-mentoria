@@ -51,3 +51,8 @@ engine de tabela, gráficos Chart.js).
 identidade própria), `build/relatorios.json` + `build/relatorios_dados.json`
 (conteúdo — começam vazios), `build/GUIA-RELATORIOS.md` (contexto do funil),
 `README.md`, `CLAUDE.md`, `SETUP-CRON.md`.
+
+## Branch / git
+- **Trabalhar SEMPRE direto na `main`.** Toda alteração termina na `main` (deploy e
+  cron só funcionam nela). Se houver branch de trabalho, abra o PR e mescle na `main`
+  ao finalizar, sem pedir de novo. Autorizado pelo dono do projeto.
